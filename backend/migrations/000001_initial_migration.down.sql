@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS node_references;
+DROP TABLE IF EXISTS nodes;
