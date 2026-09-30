@@ -50,6 +50,23 @@ export const HomeIcon = (p: IconProps) => (
 export const ImageIcon = (p: IconProps) => (
   <svg {...base(p)}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 9" /></svg>
 )
+export const PlayIcon = (p: IconProps) => (
+  <svg {...base(p)}><path d="M7 4.5v15l12-7.5z" fill="currentColor" /></svg>
+)
+export const ExternalIcon = (p: IconProps) => (
+  <svg {...base(p)}><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" /></svg>
+)
+export const PaletteIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.9 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8z" />
+    <circle cx="7.5" cy="11.5" r="1" fill="currentColor" />
+    <circle cx="10.5" cy="7.5" r="1" fill="currentColor" />
+    <circle cx="15.5" cy="8.5" r="1" fill="currentColor" />
+  </svg>
+)
+export const CheckIcon = (p: IconProps) => (
+  <svg {...base(p)}><path d="m5 12 5 5 9-10" /></svg>
+)
 export const CloseIcon = (p: IconProps) => (
   <svg {...base(p)}><path d="M6 6l12 12M18 6 6 18" /></svg>
 )

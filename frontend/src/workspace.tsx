@@ -23,8 +23,14 @@ interface WorkspaceContextValue {
   createNode: (parentId: string | null, kind: Kind) => Promise<void>
   renameNode: (id: string, current: string) => Promise<void>
   deleteNode: (id: string, name: string, kind: Kind) => Promise<void>
-  uploadFiles: (nodeId: string, files: FileList | File[]) => Promise<void>
+  uploadFiles: (
+    nodeId: string,
+    files: FileList | File[],
+    onProgress?: (done: number, total: number) => void,
+  ) => Promise<void>
 }
+
+const UPLOAD_CONCURRENCY = 3
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
 
@@ -129,21 +135,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   )
 
   const uploadFiles = useCallback(
-    async (nodeId: string, files: FileList | File[]) => {
-      const list = Array.from(files)
+    async (nodeId: string, files: FileList | File[], onProgress?: (done: number, total: number) => void) => {
+      const queue = Array.from(files)
+      const total = queue.length
+      const failed: string[] = []
+      let done = 0
       let ok = 0
-      for (const file of list) {
-        try {
-          await api.upload(nodeId, file)
-          ok++
-        } catch (e) {
-          notify(`${file.name}: ${(e as Error).message}`)
+      onProgress?.(0, total)
+
+      // A few parallel uploads keep large batches fast without flooding the server.
+      const worker = async () => {
+        for (let file = queue.shift(); file; file = queue.shift()) {
+          try {
+            await api.upload(nodeId, file)
+            ok++
+          } catch (e) {
+            failed.push(`${file.name}: ${(e as Error).message}`)
+          }
+          onProgress?.(++done, total)
         }
       }
-      if (ok) {
+      await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, total) }, worker))
+
+      if (failed.length) {
+        notify(failed.length === 1 ? failed[0] : `Не загружено ${failed.length} из ${total}: ${failed[0]}…`)
+      } else if (ok) {
         notify(ok === 1 ? 'Референс загружен' : `Загружено референсов: ${ok}`)
-        await reload()
       }
+      if (ok) await reload()
     },
     [notify, reload],
   )

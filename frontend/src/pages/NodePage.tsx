@@ -94,7 +94,7 @@ export default function NodePage() {
         </>
       ) : (
         <div className="file-layout">
-          <section className="panel reference-panel">
+          <section className="panel">
             <ReferenceGallery node={node} onChanged={reload} />
           </section>
           <div className="file-details">
