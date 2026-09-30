@@ -36,6 +36,8 @@ type createNodeRequest struct {
 	Description     string                  `json:"description"`
 	Mechanics       string                  `json:"mechanics"`
 	Characteristics []entity.Characteristic `json:"characteristics"`
+	ReferencePrompt string                  `json:"reference_prompt"`
+	AssetCategory   *string                 `json:"asset_category"`
 }
 
 type updateNodeRequest struct {
@@ -43,6 +45,9 @@ type updateNodeRequest struct {
 	Description     *string                  `json:"description"`
 	Mechanics       *string                  `json:"mechanics"`
 	Characteristics *[]entity.Characteristic `json:"characteristics"`
+	ReferencePrompt *string                  `json:"reference_prompt"`
+	// AssetCategory: omit to keep, "" to remove the file from the asset catalog.
+	AssetCategory *string `json:"asset_category"`
 }
 
 type moveNodeRequest struct {
@@ -90,6 +95,8 @@ func (c *NodeController) Create(ctx *gin.Context) {
 		Description:     req.Description,
 		Mechanics:       req.Mechanics,
 		Characteristics: req.Characteristics,
+		ReferencePrompt: req.ReferencePrompt,
+		AssetCategory:   req.AssetCategory,
 	})
 	if err != nil {
 		apperr.Respond(ctx, err)
@@ -109,6 +116,8 @@ func (c *NodeController) Update(ctx *gin.Context) {
 		Description:     req.Description,
 		Mechanics:       req.Mechanics,
 		Characteristics: req.Characteristics,
+		ReferencePrompt: req.ReferencePrompt,
+		AssetCategory:   req.AssetCategory,
 	})
 	if err != nil {
 		apperr.Respond(ctx, err)

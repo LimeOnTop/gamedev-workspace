@@ -6,6 +6,8 @@ import NodeCards from '../components/NodeCards'
 import EditableText from '../components/EditableText'
 import CharacteristicsEditor from '../components/CharacteristicsEditor'
 import ReferenceGallery from '../components/ReferenceGallery'
+import AssetCategorySelect from '../components/AssetCategorySelect'
+import PromptPanel from '../components/PromptPanel'
 import { useWorkspace } from '../workspace'
 
 export default function NodePage() {
@@ -65,9 +67,14 @@ export default function NodePage() {
       </nav>
 
       <header className="page-header">
-        <div className="title-row">
-          {isFolder ? <FolderIcon size={26} className="ico-folder" /> : <FileIcon size={26} className="ico-file" />}
-          <h1>{node.name}</h1>
+        <div className="title-block">
+          <div className="title-row">
+            {isFolder ? <FolderIcon size={26} className="ico-folder" /> : <FileIcon size={26} className="ico-file" />}
+            <h1>{node.name}</h1>
+          </div>
+          {!isFolder && (
+            <AssetCategorySelect value={node.asset_category} onChange={(asset_category) => save({ asset_category })} />
+          )}
         </div>
         <div className="header-actions">
           <button className="btn ghost" onClick={() => renameNode(node.id, node.name)}>
@@ -119,6 +126,9 @@ export default function NodePage() {
                 placeholder="Как игрок взаимодействует с объектом: действия, условия, последствия."
                 onSave={(mechanics) => save({ mechanics })}
               />
+            </section>
+            <section className="panel">
+              <PromptPanel node={node} onSave={(reference_prompt) => save({ reference_prompt })} />
             </section>
           </div>
         </div>

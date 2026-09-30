@@ -27,7 +27,7 @@ func NewNodeRepository(db *sql.DB) *NodeRepository {
 
 var _ usecase.NodeRepository = (*NodeRepository)(nil)
 
-const nodeColumns = `id, parent_id, kind, name, description, mechanics, characteristics, created_at, updated_at`
+const nodeColumns = `id, parent_id, kind, name, description, mechanics, characteristics, reference_prompt, asset_category, created_at, updated_at`
 
 func (r *NodeRepository) Create(ctx context.Context, node entity.Node) (entity.Node, error) {
 	node.ID = uuid.New().String()
@@ -40,12 +40,14 @@ func (r *NodeRepository) Create(ctx context.Context, node entity.Node) (entity.N
 	}
 
 	query := `
-		INSERT INTO nodes (id, parent_id, kind, name, description, mechanics, characteristics, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO nodes (id, parent_id, kind, name, description, mechanics, characteristics,
+		                   reference_prompt, asset_category, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 	_, err = r.db.ExecContext(ctx, query,
 		node.ID, node.ParentID, node.Kind, node.Name, node.Description,
-		node.Mechanics, chars, node.CreatedAt, node.UpdatedAt,
+		node.Mechanics, chars, node.ReferencePrompt, node.AssetCategory,
+		node.CreatedAt, node.UpdatedAt,
 	)
 	if err != nil {
 		return entity.Node{}, fmt.Errorf("create node: %w", err)
@@ -71,7 +73,7 @@ func (r *NodeRepository) GetByID(ctx context.Context, id string) (entity.Node, e
 
 func (r *NodeRepository) GetAllBrief(ctx context.Context) ([]entity.NodeBrief, error) {
 	query := `
-		SELECT n.id, n.parent_id, n.kind, n.name, left(n.description, 180),
+		SELECT n.id, n.parent_id, n.kind, n.name, left(n.description, 180), n.asset_category,
 		       (SELECT ref.stored_name FROM node_references ref
 		         WHERE ref.node_id = n.id AND ref.content_type LIKE 'image/%'
 		         ORDER BY ref.created_at, ref.id LIMIT 1)
@@ -87,7 +89,7 @@ func (r *NodeRepository) GetAllBrief(ctx context.Context) ([]entity.NodeBrief, e
 	var nodes []entity.NodeBrief
 	for rows.Next() {
 		var n entity.NodeBrief
-		if err := rows.Scan(&n.ID, &n.ParentID, &n.Kind, &n.Name, &n.Summary, &n.Preview); err != nil {
+		if err := rows.Scan(&n.ID, &n.ParentID, &n.Kind, &n.Name, &n.Summary, &n.AssetCategory, &n.Preview); err != nil {
 			return nil, fmt.Errorf("scan node: %w", err)
 		}
 		nodes = append(nodes, n)
@@ -137,11 +139,13 @@ func (r *NodeRepository) Update(ctx context.Context, node entity.Node) (entity.N
 
 	query := `
 		UPDATE nodes
-		SET name = $1, description = $2, mechanics = $3, characteristics = $4, updated_at = $5
-		WHERE id = $6
+		SET name = $1, description = $2, mechanics = $3, characteristics = $4,
+		    reference_prompt = $5, asset_category = $6, updated_at = $7
+		WHERE id = $8
 	`
 	res, err := r.db.ExecContext(ctx, query,
-		node.Name, node.Description, node.Mechanics, chars, node.UpdatedAt, node.ID,
+		node.Name, node.Description, node.Mechanics, chars,
+		node.ReferencePrompt, node.AssetCategory, node.UpdatedAt, node.ID,
 	)
 	if err != nil {
 		return entity.Node{}, fmt.Errorf("update node: %w", err)
@@ -216,7 +220,8 @@ func (r *NodeRepository) Search(ctx context.Context, query string, limit int64) 
 	searchQuery := `
 		SELECT id, parent_id, kind, name, left(description, 180)
 		FROM nodes
-		WHERE name ILIKE $1 OR description ILIKE $1 OR mechanics ILIKE $1 OR characteristics::text ILIKE $1
+		WHERE name ILIKE $1 OR description ILIKE $1 OR mechanics ILIKE $1
+		   OR characteristics::text ILIKE $1 OR reference_prompt ILIKE $1
 		ORDER BY (name ILIKE $1) DESC, lower(name)
 		LIMIT $2
 	`
@@ -246,7 +251,8 @@ func scanNode(row *sql.Row) (entity.Node, error) {
 	var chars []byte
 	if err := row.Scan(
 		&node.ID, &node.ParentID, &node.Kind, &node.Name, &node.Description,
-		&node.Mechanics, &chars, &node.CreatedAt, &node.UpdatedAt,
+		&node.Mechanics, &chars, &node.ReferencePrompt, &node.AssetCategory,
+		&node.CreatedAt, &node.UpdatedAt,
 	); err != nil {
 		return entity.Node{}, err
 	}
@@ -270,4 +276,19 @@ func marshalCharacteristics(chars []entity.Characteristic) ([]byte, error) {
 func isUUID(s string) bool {
 	_, err := uuid.Parse(s)
 	return err == nil
+}
+
+func decodePath(raw []byte) ([]entity.PathItem, error) {
+	var items []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("decode path: %w", err)
+	}
+	path := make([]entity.PathItem, 0, len(items))
+	for _, it := range items {
+		path = append(path, entity.PathItem{ID: it.ID, Name: it.Name})
+	}
+	return path, nil
 }

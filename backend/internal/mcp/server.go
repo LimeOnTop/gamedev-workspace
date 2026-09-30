@@ -29,20 +29,32 @@ const instructions = `Gamedev Workspace stores game design documentation as a tr
   and references (images, videos, PDFs).
 Workflow: call get_tree first to learn the structure and node IDs, then read/create/update nodes.
 Write content in the language the existing workspace uses. Every result includes web_url
-so you can link the user to the page you changed.`
+so you can link the user to the page you changed.
+
+3D asset catalog: files describing physical objects that will get a 3D model (weapons, siege engines,
+locations/buildings, characters, items, props, gear) should have asset_category set
+(see list_asset_categories). Design documents (story, rules, mechanics overviews, UI) must NOT
+get a category. Folders never have one.
+
+reference_prompt: a text-to-image prompt used to generate reference art for the object. Write it in
+English, as one self-contained paragraph: the object itself (shape, materials, colours, wear, scale
+cues), the game's art style, and a presentation useful for 3D modelling (single object, neutral
+background, three-quarter view, even lighting, no text).`
 
 type Server struct {
 	node      usecase.Node
 	reference usecase.Reference
+	asset     usecase.Asset
 	publicURL string
 	http      *http.Client
 }
 
 // NewHandler returns an http.Handler serving MCP over Streamable HTTP.
-func NewHandler(node usecase.Node, reference usecase.Reference, publicURL string) http.Handler {
+func NewHandler(node usecase.Node, reference usecase.Reference, asset usecase.Asset, publicURL string) http.Handler {
 	s := &Server{
 		node:      node,
 		reference: reference,
+		asset:     asset,
 		publicURL: strings.TrimRight(publicURL, "/"),
 		http:      &http.Client{Timeout: 60 * time.Second},
 	}
@@ -63,16 +75,30 @@ func (s *Server) register(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_tree",
 		Title:       "Get workspace tree",
-		Description: "Returns the whole folder/file tree as an indented outline with node IDs.",
+		Description: "Returns the whole folder/file tree as an indented outline with node IDs; 3D assets are marked [3D: category].",
 		Annotations: readOnly,
 	}, s.getTree)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_node",
 		Title:       "Get node",
-		Description: "Returns a folder or file with its description, characteristics, mechanics, references and breadcrumb path.",
+		Description: "Returns a folder or file with its description, characteristics, mechanics, reference prompt, asset category, references and breadcrumb path.",
 		Annotations: readOnly,
 	}, s.getNode)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_asset_categories",
+		Title:       "List 3D asset categories",
+		Description: "Returns the categories of the 3D asset catalog (weapons, map, characters, ...) with asset counts.",
+		Annotations: readOnly,
+	}, s.listAssetCategories)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_assets",
+		Title:       "List 3D assets",
+		Description: "Returns files in the 3D asset catalog, optionally filtered by category, with their folder path.",
+		Annotations: readOnly,
+	}, s.listAssets)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_nodes",
@@ -162,6 +188,8 @@ type createFileInput struct {
 	Description     string                  `json:"description,omitempty" jsonschema:"what the object is: look, role, lore"`
 	Mechanics       string                  `json:"mechanics,omitempty" jsonschema:"how the player interacts with the object"`
 	Characteristics []entity.Characteristic `json:"characteristics,omitempty" jsonschema:"ordered key/value stats, e.g. Damage=18"`
+	ReferencePrompt string                  `json:"reference_prompt,omitempty" jsonschema:"English text-to-image prompt for generating reference art of the object"`
+	AssetCategory   string                  `json:"asset_category,omitempty" jsonschema:"3D asset category ID from list_asset_categories; only for objects that get a 3D model"`
 }
 
 type updateNodeInput struct {
@@ -172,6 +200,12 @@ type updateNodeInput struct {
 	Characteristics          []entity.Characteristic `json:"characteristics,omitempty" jsonschema:"characteristics to set"`
 	MergeCharacteristics     bool                    `json:"merge_characteristics,omitempty" jsonschema:"true: upsert given keys and keep others; false (default): replace the whole list"`
 	RemoveCharacteristicKeys []string                `json:"remove_characteristic_keys,omitempty" jsonschema:"characteristic keys to remove (case-insensitive)"`
+	ReferencePrompt          *string                 `json:"reference_prompt,omitempty" jsonschema:"new reference generation prompt (replaces the old one)"`
+	AssetCategory            *string                 `json:"asset_category,omitempty" jsonschema:"3D asset category ID; empty string removes the file from the asset catalog"`
+}
+
+type listAssetsInput struct {
+	Category string `json:"category,omitempty" jsonschema:"category ID; omit for all categories"`
 }
 
 type moveNodeInput struct {
@@ -210,10 +244,21 @@ type nodeView struct {
 	Description     string                  `json:"description"`
 	Mechanics       string                  `json:"mechanics,omitempty"`
 	Characteristics []entity.Characteristic `json:"characteristics,omitempty"`
+	ReferencePrompt string                  `json:"reference_prompt,omitempty"`
+	AssetCategory   *string                 `json:"asset_category,omitempty"`
 	References      []referenceView         `json:"references,omitempty"`
 	Children        []childView             `json:"children,omitempty"`
 	WebURL          string                  `json:"web_url"`
 	UpdatedAt       string                  `json:"updated_at"`
+}
+
+type assetView struct {
+	ID       string `json:"id"`
+	Category string `json:"category"`
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Summary  string `json:"summary,omitempty"`
+	WebURL   string `json:"web_url"`
 }
 
 type childView struct {
@@ -262,6 +307,8 @@ func (s *Server) nodeView(ctx context.Context, node usecase.NodeDTO) nodeView {
 		Description:     node.Description,
 		Mechanics:       node.Mechanics,
 		Characteristics: node.Characteristics,
+		ReferencePrompt: node.ReferencePrompt,
+		AssetCategory:   node.AssetCategory,
 		WebURL:          s.webURL(node.ID),
 		UpdatedAt:       node.UpdatedAt.Format(time.RFC3339),
 	}
@@ -298,7 +345,11 @@ func (s *Server) getTree(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}
 			if n.Kind == entity.KindFolder {
 				icon = "📁"
 			}
-			fmt.Fprintf(&b, "%s%s %s  [id=%s]\n", strings.Repeat("  ", depth), icon, n.Name, n.ID)
+			asset := ""
+			if n.AssetCategory != nil {
+				asset = "  [3D: " + *n.AssetCategory + "]"
+			}
+			fmt.Fprintf(&b, "%s%s %s  [id=%s]%s\n", strings.Repeat("  ", depth), icon, n.Name, n.ID, asset)
 			walk(n.Children, depth+1)
 		}
 	}
@@ -312,6 +363,44 @@ func (s *Server) getNode(ctx context.Context, _ *mcp.CallToolRequest, in idInput
 		return nil, nil, publicErr(err)
 	}
 	return nil, s.nodeView(ctx, node), nil
+}
+
+func (s *Server) listAssetCategories(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+	categories, err := s.asset.Categories(ctx)
+	if err != nil {
+		return nil, nil, publicErr(err)
+	}
+	type categoryView struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		AssetCount  int    `json:"asset_count"`
+	}
+	views := make([]categoryView, 0, len(categories))
+	for _, c := range categories {
+		views = append(views, categoryView{ID: c.ID, Name: c.Name, Description: c.Description, AssetCount: c.AssetCount})
+	}
+	return nil, map[string]any{"categories": views}, nil
+}
+
+func (s *Server) listAssets(ctx context.Context, _ *mcp.CallToolRequest, in listAssetsInput) (*mcp.CallToolResult, any, error) {
+	assets, err := s.asset.List(ctx, in.Category)
+	if err != nil {
+		return nil, nil, publicErr(err)
+	}
+	views := make([]assetView, 0, len(assets))
+	for _, a := range assets {
+		names := make([]string, 0, len(a.Path)+1)
+		for _, p := range a.Path {
+			names = append(names, p.Name)
+		}
+		names = append(names, a.Name)
+		views = append(views, assetView{
+			ID: a.ID, Category: a.Category, Name: a.Name, Summary: a.Summary,
+			Path: "/" + strings.Join(names, "/"), WebURL: s.webURL(a.ID),
+		})
+	}
+	return nil, map[string]any{"assets": views}, nil
 }
 
 func (s *Server) searchNodes(ctx context.Context, _ *mcp.CallToolRequest, in searchInput) (*mcp.CallToolResult, any, error) {
@@ -354,6 +443,8 @@ func (s *Server) createFile(ctx context.Context, _ *mcp.CallToolRequest, in crea
 		Description:     in.Description,
 		Mechanics:       in.Mechanics,
 		Characteristics: in.Characteristics,
+		ReferencePrompt: in.ReferencePrompt,
+		AssetCategory:   optional(in.AssetCategory),
 	})
 	if err != nil {
 		return nil, nil, publicErr(err)
@@ -362,7 +453,13 @@ func (s *Server) createFile(ctx context.Context, _ *mcp.CallToolRequest, in crea
 }
 
 func (s *Server) updateNode(ctx context.Context, _ *mcp.CallToolRequest, in updateNodeInput) (*mcp.CallToolResult, any, error) {
-	input := usecase.UpdateNodeInput{Name: in.Name, Description: in.Description, Mechanics: in.Mechanics}
+	input := usecase.UpdateNodeInput{
+		Name:            in.Name,
+		Description:     in.Description,
+		Mechanics:       in.Mechanics,
+		ReferencePrompt: in.ReferencePrompt,
+		AssetCategory:   in.AssetCategory,
+	}
 
 	if in.Characteristics != nil || len(in.RemoveCharacteristicKeys) > 0 {
 		var chars []entity.Characteristic

@@ -80,6 +80,14 @@ func (fakeRefs) GetByStoredName(context.Context, string) (entity.Reference, erro
 }
 func (fakeRefs) Delete(context.Context, string) (string, error) { return "", nil }
 
+type fakeAssets struct{}
+
+func (fakeAssets) GetCategories(context.Context) ([]entity.AssetCategory, error) { return nil, nil }
+func (fakeAssets) CategoryExists(_ context.Context, id string) (bool, error) {
+	return id == "weapon" || id == "map", nil
+}
+func (fakeAssets) GetAssets(context.Context, string) ([]entity.Asset, error) { return nil, nil }
+
 type fakeFiles struct{ removed []string }
 
 func (f *fakeFiles) Save(context.Context, string, io.Reader, int64) (int64, error) { return 0, nil }
@@ -108,7 +116,7 @@ func newTestService() (*NodeService, *fakeNodes, *fakeFiles, *fakeCache) {
 	}}
 	files := &fakeFiles{}
 	cache := &fakeCache{}
-	return NewNodeService(nodes, fakeRefs{}, files, cache), nodes, files, cache
+	return NewNodeService(nodes, fakeRefs{}, fakeAssets{}, files, cache), nodes, files, cache
 }
 
 func TestCreateValidatesParent(t *testing.T) {
@@ -180,5 +188,33 @@ func TestBuildTree(t *testing.T) {
 	})
 	if len(tree) != 2 || len(tree[0].Children) != 1 || tree[0].Children[0].ID != "b" || tree[1].Children == nil {
 		t.Fatalf("unexpected tree: %+v", tree)
+	}
+}
+
+func TestAssetCategoryValidation(t *testing.T) {
+	svc, _, _, _ := newTestService()
+	ctx := context.Background()
+
+	if _, err := svc.Update(ctx, "map", usecase.UpdateNodeInput{AssetCategory: ptr("map")}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("folder as asset: want validation error, got %v", err)
+	}
+	if _, err := svc.Update(ctx, "castle", usecase.UpdateNodeInput{AssetCategory: ptr("vehicle")}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("unknown category: want validation error, got %v", err)
+	}
+
+	got, err := svc.Update(ctx, "castle", usecase.UpdateNodeInput{AssetCategory: ptr(" map "), ReferencePrompt: ptr("  castle on a hill  ")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AssetCategory == nil || *got.AssetCategory != "map" || got.ReferencePrompt != "castle on a hill" {
+		t.Fatalf("asset fields not saved: category=%v prompt=%q", got.AssetCategory, got.ReferencePrompt)
+	}
+
+	// Other updates keep the category; "" removes it.
+	if got, err = svc.Update(ctx, "castle", usecase.UpdateNodeInput{Name: ptr("Castle 2")}); err != nil || got.AssetCategory == nil {
+		t.Fatalf("category lost on unrelated update: %v %v", got.AssetCategory, err)
+	}
+	if got, err = svc.Update(ctx, "castle", usecase.UpdateNodeInput{AssetCategory: ptr("")}); err != nil || got.AssetCategory != nil {
+		t.Fatalf("category not cleared: %v %v", got.AssetCategory, err)
 	}
 }

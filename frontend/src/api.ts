@@ -7,6 +7,7 @@ export interface TreeNode {
   name: string
   summary: string
   preview: string | null
+  asset_category: string | null
   children: TreeNode[]
 }
 
@@ -33,6 +34,8 @@ export interface NodeDetail {
   description: string
   mechanics: string
   characteristics: Characteristic[]
+  reference_prompt: string
+  asset_category: string | null
   created_at: string
   updated_at: string
   references: Reference[]
@@ -44,6 +47,26 @@ export interface NodePatch {
   description?: string
   mechanics?: string
   characteristics?: Characteristic[]
+  reference_prompt?: string
+  /** "" removes the file from the 3D asset catalog. */
+  asset_category?: string
+}
+
+export interface AssetCategory {
+  id: string
+  name: string
+  description: string
+  asset_count: number
+}
+
+export interface Asset {
+  id: string
+  parent_id: string | null
+  category: string
+  name: string
+  summary: string
+  preview: string | null
+  path: { id: string; name: string }[]
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -81,6 +104,9 @@ export const api = {
     return request<Reference>(`/api/nodes/${nodeId}/references`, { method: 'POST', body: form })
   },
   removeReference: (id: string) => request<void>(`/api/references/${id}`, { method: 'DELETE' }),
+  assetCategories: () => request<AssetCategory[]>('/api/asset-categories'),
+  assets: (category?: string) =>
+    request<Asset[]>(`/api/assets${category ? `?category=${encodeURIComponent(category)}` : ''}`),
 }
 
 export const isImage = (r: Reference) => r.content_type.startsWith('image/')

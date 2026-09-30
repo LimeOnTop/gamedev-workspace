@@ -25,6 +25,8 @@ type NodeDTO struct {
 	Description     string
 	Mechanics       string
 	Characteristics []entity.Characteristic
+	ReferencePrompt string
+	AssetCategory   *string
 	References      []ReferenceDTO
 	Path            []entity.PathItem
 	CreatedAt       time.Time
@@ -34,13 +36,14 @@ type NodeDTO struct {
 // TreeNodeDTO is a node of the folder tree shown in the sidebar and overview cards.
 // It is also the shape stored in the tree cache.
 type TreeNodeDTO struct {
-	ID       string
-	ParentID *string
-	Kind     string
-	Name     string
-	Summary  string
-	Preview  *string
-	Children []TreeNodeDTO
+	ID            string
+	ParentID      *string
+	Kind          string
+	Name          string
+	Summary       string
+	Preview       *string
+	AssetCategory *string
+	Children      []TreeNodeDTO
 }
 
 type SearchHitDTO struct {
@@ -58,6 +61,9 @@ type CreateNodeInput struct {
 	Description     string
 	Mechanics       string
 	Characteristics []entity.Characteristic
+	ReferencePrompt string
+	// AssetCategory marks the file as a 3D asset; nil or "" means none.
+	AssetCategory *string
 }
 
 // UpdateNodeInput is a partial update: nil fields are left unchanged.
@@ -66,6 +72,26 @@ type UpdateNodeInput struct {
 	Description     *string
 	Mechanics       *string
 	Characteristics *[]entity.Characteristic
+	ReferencePrompt *string
+	// AssetCategory: nil leaves it unchanged, "" removes the file from the asset catalog.
+	AssetCategory *string
+}
+
+type AssetCategoryDTO struct {
+	ID          string
+	Name        string
+	Description string
+	AssetCount  int
+}
+
+type AssetDTO struct {
+	ID       string
+	ParentID *string
+	Category string
+	Name     string
+	Summary  string
+	Preview  *string
+	Path     []entity.PathItem
 }
 
 type UploadReferenceInput struct {

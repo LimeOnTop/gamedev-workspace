@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import ThemePicker from './components/ThemePicker'
 import Home from './pages/Home'
 import NodePage from './pages/NodePage'
+import AssetsPage from './pages/AssetsPage'
 import { WorkspaceProvider } from './workspace'
 
 export default function App() {
@@ -17,6 +18,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/node/:id" element={<NodePage />} />
+            <Route path="/assets" element={<AssetsPage />} />
+            <Route path="/assets/:category" element={<AssetsPage />} />
             <Route path="*" element={<Home />} />
           </Routes>
         </main>

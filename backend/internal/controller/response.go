@@ -31,6 +31,8 @@ type nodeResponse struct {
 	Description     string                  `json:"description"`
 	Mechanics       string                  `json:"mechanics"`
 	Characteristics []entity.Characteristic `json:"characteristics"`
+	ReferencePrompt string                  `json:"reference_prompt"`
+	AssetCategory   *string                 `json:"asset_category"`
 	References      []referenceResponse     `json:"references"`
 	Path            []pathItemResponse      `json:"path"`
 	CreatedAt       string                  `json:"created_at"`
@@ -38,13 +40,31 @@ type nodeResponse struct {
 }
 
 type treeNodeResponse struct {
+	ID            string             `json:"id"`
+	ParentID      *string            `json:"parent_id"`
+	Kind          string             `json:"kind"`
+	Name          string             `json:"name"`
+	Summary       string             `json:"summary"`
+	Preview       *string            `json:"preview"`
+	AssetCategory *string            `json:"asset_category"`
+	Children      []treeNodeResponse `json:"children"`
+}
+
+type assetCategoryResponse struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	AssetCount  int    `json:"asset_count"`
+}
+
+type assetResponse struct {
 	ID       string             `json:"id"`
 	ParentID *string            `json:"parent_id"`
-	Kind     string             `json:"kind"`
+	Category string             `json:"category"`
 	Name     string             `json:"name"`
 	Summary  string             `json:"summary"`
 	Preview  *string            `json:"preview"`
-	Children []treeNodeResponse `json:"children"`
+	Path     []pathItemResponse `json:"path"`
 }
 
 type searchHitResponse struct {
@@ -58,6 +78,41 @@ type searchHitResponse struct {
 // UploadURL is the public path a stored reference is served from.
 func UploadURL(storedName string) string {
 	return "/uploads/" + url.PathEscape(storedName)
+}
+
+func previewURL(storedName *string) *string {
+	if storedName == nil {
+		return nil
+	}
+	u := UploadURL(*storedName)
+	return &u
+}
+
+func toPathResponse(path []entity.PathItem) []pathItemResponse {
+	result := make([]pathItemResponse, 0, len(path))
+	for _, p := range path {
+		result = append(result, pathItemResponse{ID: p.ID, Name: p.Name})
+	}
+	return result
+}
+
+func toAssetCategoriesResponse(categories []usecase.AssetCategoryDTO) []assetCategoryResponse {
+	result := make([]assetCategoryResponse, 0, len(categories))
+	for _, c := range categories {
+		result = append(result, assetCategoryResponse{ID: c.ID, Name: c.Name, Description: c.Description, AssetCount: c.AssetCount})
+	}
+	return result
+}
+
+func toAssetsResponse(assets []usecase.AssetDTO) []assetResponse {
+	result := make([]assetResponse, 0, len(assets))
+	for _, a := range assets {
+		result = append(result, assetResponse{
+			ID: a.ID, ParentID: a.ParentID, Category: a.Category, Name: a.Name,
+			Summary: a.Summary, Preview: previewURL(a.Preview), Path: toPathResponse(a.Path),
+		})
+	}
+	return result
 }
 
 func toReferenceResponse(ref usecase.ReferenceDTO) referenceResponse {
@@ -89,6 +144,8 @@ func toNodeResponse(node usecase.NodeDTO) nodeResponse {
 		Description:     node.Description,
 		Mechanics:       node.Mechanics,
 		Characteristics: node.Characteristics,
+		ReferencePrompt: node.ReferencePrompt,
+		AssetCategory:   node.AssetCategory,
 		References:      refs,
 		Path:            path,
 		CreatedAt:       node.CreatedAt.Format(time.RFC3339),
@@ -99,19 +156,15 @@ func toNodeResponse(node usecase.NodeDTO) nodeResponse {
 func toTreeResponse(nodes []usecase.TreeNodeDTO) []treeNodeResponse {
 	result := make([]treeNodeResponse, 0, len(nodes))
 	for _, n := range nodes {
-		var preview *string
-		if n.Preview != nil {
-			u := UploadURL(*n.Preview)
-			preview = &u
-		}
 		result = append(result, treeNodeResponse{
-			ID:       n.ID,
-			ParentID: n.ParentID,
-			Kind:     n.Kind,
-			Name:     n.Name,
-			Summary:  n.Summary,
-			Preview:  preview,
-			Children: toTreeResponse(n.Children),
+			ID:            n.ID,
+			ParentID:      n.ParentID,
+			Kind:          n.Kind,
+			Name:          n.Name,
+			Summary:       n.Summary,
+			Preview:       previewURL(n.Preview),
+			AssetCategory: n.AssetCategory,
+			Children:      toTreeResponse(n.Children),
 		})
 	}
 	return result

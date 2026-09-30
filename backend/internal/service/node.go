@@ -21,6 +21,7 @@ const (
 type NodeService struct {
 	nodes      usecase.NodeRepository
 	references usecase.ReferenceRepository
+	assets     usecase.AssetRepository
 	files      usecase.FileStorage
 	cache      usecase.TreeCache
 }
@@ -28,10 +29,11 @@ type NodeService struct {
 func NewNodeService(
 	nodes usecase.NodeRepository,
 	references usecase.ReferenceRepository,
+	assets usecase.AssetRepository,
 	files usecase.FileStorage,
 	cache usecase.TreeCache,
 ) *NodeService {
-	return &NodeService{nodes: nodes, references: references, files: files, cache: cache}
+	return &NodeService{nodes: nodes, references: references, assets: assets, files: files, cache: cache}
 }
 
 var _ usecase.Node = (*NodeService)(nil)
@@ -99,6 +101,10 @@ func (s *NodeService) Create(ctx context.Context, input usecase.CreateNodeInput)
 	if err := s.ensureFolder(ctx, input.ParentID); err != nil {
 		return usecase.NodeDTO{}, err
 	}
+	category, err := s.checkAssetCategory(ctx, input.Kind, input.AssetCategory)
+	if err != nil {
+		return usecase.NodeDTO{}, err
+	}
 
 	created, err := s.nodes.Create(ctx, entity.Node{
 		ParentID:        input.ParentID,
@@ -107,6 +113,8 @@ func (s *NodeService) Create(ctx context.Context, input usecase.CreateNodeInput)
 		Description:     strings.TrimSpace(input.Description),
 		Mechanics:       strings.TrimSpace(input.Mechanics),
 		Characteristics: cleanCharacteristics(input.Characteristics),
+		ReferencePrompt: strings.TrimSpace(input.ReferencePrompt),
+		AssetCategory:   category,
 	})
 	if err != nil {
 		return usecase.NodeDTO{}, fmt.Errorf("create node: %w", err)
@@ -134,6 +142,14 @@ func (s *NodeService) Update(ctx context.Context, id string, input usecase.Updat
 	}
 	if input.Characteristics != nil {
 		node.Characteristics = cleanCharacteristics(*input.Characteristics)
+	}
+	if input.ReferencePrompt != nil {
+		node.ReferencePrompt = strings.TrimSpace(*input.ReferencePrompt)
+	}
+	if input.AssetCategory != nil {
+		if node.AssetCategory, err = s.checkAssetCategory(ctx, node.Kind, input.AssetCategory); err != nil {
+			return usecase.NodeDTO{}, err
+		}
 	}
 
 	updated, err := s.nodes.Update(ctx, node)
@@ -199,6 +215,26 @@ func (s *NodeService) ensureFolder(ctx context.Context, id *string) error {
 	return nil
 }
 
+// checkAssetCategory normalizes a requested asset category: "" clears it,
+// otherwise it must exist and may only be set on files.
+func (s *NodeService) checkAssetCategory(ctx context.Context, kind string, category *string) (*string, error) {
+	if category == nil || strings.TrimSpace(*category) == "" {
+		return nil, nil
+	}
+	id := strings.TrimSpace(*category)
+	if kind != entity.KindFile {
+		return nil, apperr.Validation("only files can be 3D assets, folders cannot have an asset category")
+	}
+	exists, err := s.assets.CategoryExists(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, apperr.Validation("unknown asset category %q", id)
+	}
+	return &id, nil
+}
+
 func (s *NodeService) invalidate(ctx context.Context) {
 	invalidateTree(ctx, s.cache)
 }
@@ -221,6 +257,8 @@ func (s *NodeService) toDetailedDTO(ctx context.Context, node entity.Node) (usec
 		Description:     node.Description,
 		Mechanics:       node.Mechanics,
 		Characteristics: node.Characteristics,
+		ReferencePrompt: node.ReferencePrompt,
+		AssetCategory:   node.AssetCategory,
 		References:      make([]usecase.ReferenceDTO, 0, len(references)),
 		Path:            path,
 		CreatedAt:       node.CreatedAt,
@@ -251,13 +289,14 @@ func buildTree(briefs []entity.NodeBrief) []usecase.TreeNodeDTO {
 		result := make([]usecase.TreeNodeDTO, 0, len(items))
 		for _, b := range items {
 			result = append(result, usecase.TreeNodeDTO{
-				ID:       b.ID,
-				ParentID: b.ParentID,
-				Kind:     b.Kind,
-				Name:     b.Name,
-				Summary:  b.Summary,
-				Preview:  b.Preview,
-				Children: build(children[b.ID]),
+				ID:            b.ID,
+				ParentID:      b.ParentID,
+				Kind:          b.Kind,
+				Name:          b.Name,
+				Summary:       b.Summary,
+				Preview:       b.Preview,
+				AssetCategory: b.AssetCategory,
+				Children:      build(children[b.ID]),
 			})
 		}
 		return result

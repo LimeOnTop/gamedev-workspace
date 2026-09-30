@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Kind, type TreeNode } from './api'
+import { api, type AssetCategory, type Kind, type TreeNode } from './api'
 
 interface Dialog {
   title: string
@@ -12,6 +12,7 @@ interface Dialog {
 
 interface WorkspaceContextValue {
   tree: TreeNode[]
+  assetCategories: AssetCategory[]
   loading: boolean
   error: string | null
   /** Bumped on every mutation so open pages can refetch their node. */
@@ -43,6 +44,7 @@ export function useWorkspace() {
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const [tree, setTree] = useState<TreeNode[]>([])
+  const [assetCategories, setAssetCategories] = useState<AssetCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
@@ -58,7 +60,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     try {
-      setTree(await api.tree())
+      const [nextTree, categories] = await Promise.all([api.tree(), api.assetCategories()])
+      setTree(nextTree)
+      setAssetCategories(categories)
       setError(null)
     } catch (e) {
       setError((e as Error).message)
@@ -168,7 +172,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   )
 
   const value: WorkspaceContextValue = {
-    tree, loading, error, version, reload, notify, askName, confirm,
+    tree, assetCategories, loading, error, version, reload, notify, askName, confirm,
     createNode, renameNode, deleteNode, uploadFiles,
   }
 

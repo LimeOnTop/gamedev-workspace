@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { ancestorsOf, type TreeNode } from '../api'
 import { useWorkspace } from '../workspace'
+import { AssetCategoryIcon, CubeIcon } from './AssetIcons'
 import {
   ChevronIcon, EditIcon, FileIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, HomeIcon, TrashIcon, UploadIcon,
 } from './Icons'
@@ -17,7 +18,7 @@ function loadExpanded(): Set<string> {
 }
 
 export default function Sidebar() {
-  const { tree, loading, error, createNode } = useWorkspace()
+  const { tree, assetCategories, loading, error, createNode } = useWorkspace()
   const location = useLocation()
   const activeId = location.pathname.match(/^\/node\/([^/]+)/)?.[1] ?? null
   const [expanded, setExpanded] = useState<Set<string>>(loadExpanded)
@@ -61,6 +62,25 @@ export default function Sidebar() {
         </Link>
       </nav>
 
+      <div className="sidebar-scroll">
+      <div className="sidebar-section">
+        <Link to="/assets" className="section-link">3D-ассеты</Link>
+      </div>
+      <nav className="asset-nav" aria-label="Каталог 3D-ассетов">
+        {assetCategories.map((c) => (
+          <Link
+            key={c.id}
+            to={`/assets/${c.id}`}
+            className={`asset-nav-item ${location.pathname === `/assets/${c.id}` ? 'active' : ''}`}
+            title={c.description}
+          >
+            <AssetCategoryIcon category={c.id} className="ico-asset" />
+            <span className="tree-name">{c.name}</span>
+            <span className="asset-count">{c.asset_count || ''}</span>
+          </Link>
+        ))}
+      </nav>
+
       <div className="sidebar-section">
         <span>Структура</span>
         <div className="row-actions visible">
@@ -82,6 +102,7 @@ export default function Sidebar() {
         {tree.map((node) => (
           <TreeItem key={node.id} node={node} depth={0} expanded={expanded} toggle={toggle} activeId={activeId} />
         ))}
+      </div>
       </div>
     </aside>
   )
@@ -120,7 +141,13 @@ function TreeItem({ node, depth, expanded, toggle, activeId }: TreeItemProps) {
           <span className="chevron-spacer" />
         )}
         <Link to={`/node/${node.id}`} className="tree-link" onClick={isFolder ? openFolder : undefined}>
-          {isFolder ? <FolderIcon className="ico-folder" /> : <FileIcon className="ico-file" />}
+          {isFolder ? (
+            <FolderIcon className="ico-folder" />
+          ) : node.asset_category ? (
+            <CubeIcon className="ico-asset" aria-label="3D-ассет" />
+          ) : (
+            <FileIcon className="ico-file" />
+          )}
           <span className="tree-name">{node.name}</span>
         </Link>
         <div className="row-actions">

@@ -67,6 +67,12 @@ export const PaletteIcon = (p: IconProps) => (
 export const CheckIcon = (p: IconProps) => (
   <svg {...base(p)}><path d="m5 12 5 5 9-10" /></svg>
 )
+export const CopyIcon = (p: IconProps) => (
+  <svg {...base(p)}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+)
+export const SparkIcon = (p: IconProps) => (
+  <svg {...base(p)}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" /></svg>
+)
 export const CloseIcon = (p: IconProps) => (
   <svg {...base(p)}><path d="M6 6l12 12M18 6 6 18" /></svg>
 )
