@@ -26,6 +26,17 @@ export interface Reference {
   created_at: string
 }
 
+/** The file's 3D model (GLB); a file has at most one. */
+export interface Model3D {
+  id: string
+  node_id: string
+  original_name: string
+  url: string
+  content_type: string
+  size: number
+  created_at: string
+}
+
 export interface NodeDetail {
   id: string
   parent_id: string | null
@@ -39,6 +50,7 @@ export interface NodeDetail {
   created_at: string
   updated_at: string
   references: Reference[]
+  model: Model3D | null
   path: { id: string; name: string }[]
 }
 
@@ -66,6 +78,7 @@ export interface Asset {
   name: string
   summary: string
   preview: string | null
+  has_model: boolean
   path: { id: string; name: string }[]
 }
 
@@ -83,6 +96,22 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T
   return res.json()
+}
+
+// XHR instead of fetch: models are large and fetch cannot report upload progress.
+function uploadWithProgress<T>(url: string, method: string, form: FormData, onProgress?: (fraction: number) => void) {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, url)
+    xhr.responseType = 'json'
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total)
+    xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке'))
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response as T)
+      else reject(new Error(xhr.response?.error ?? `${xhr.status} ${xhr.statusText}`))
+    }
+    xhr.send(form)
+  })
 }
 
 const json = (method: string, body: unknown): RequestInit => ({
@@ -104,6 +133,12 @@ export const api = {
     return request<Reference>(`/api/nodes/${nodeId}/references`, { method: 'POST', body: form })
   },
   removeReference: (id: string) => request<void>(`/api/references/${id}`, { method: 'DELETE' }),
+  uploadModel: (nodeId: string, file: File, onProgress?: (fraction: number) => void) => {
+    const form = new FormData()
+    form.append('file', file)
+    return uploadWithProgress<Model3D>(`/api/nodes/${nodeId}/model`, 'PUT', form, onProgress)
+  },
+  removeModel: (nodeId: string) => request<void>(`/api/nodes/${nodeId}/model`, { method: 'DELETE' }),
   assetCategories: () => request<AssetCategory[]>('/api/asset-categories'),
   assets: (category?: string) =>
     request<Asset[]>(`/api/assets${category ? `?category=${encodeURIComponent(category)}` : ''}`),

@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -26,7 +27,7 @@ const instructions = `Gamedev Workspace stores game design documentation as a tr
 - Folders group related entities (e.g. "Weapons", "Map", "Characters").
 - Files describe a single game object (e.g. "Castle", "Pistol") and hold: description,
   characteristics (ordered key/value pairs such as damage or size), interaction mechanics,
-  and references (images, videos, PDFs).
+  references (images, videos, PDFs) and at most one 3D model (GLB).
 Workflow: call get_tree first to learn the structure and node IDs, then read/create/update nodes.
 Write content in the language the existing workspace uses. Every result includes web_url
 so you can link the user to the page you changed.
@@ -44,19 +45,21 @@ background, three-quarter view, even lighting, no text).`
 type Server struct {
 	node      usecase.Node
 	reference usecase.Reference
+	model     usecase.Model
 	asset     usecase.Asset
 	publicURL string
 	http      *http.Client
 }
 
 // NewHandler returns an http.Handler serving MCP over Streamable HTTP.
-func NewHandler(node usecase.Node, reference usecase.Reference, asset usecase.Asset, publicURL string) http.Handler {
+func NewHandler(node usecase.Node, reference usecase.Reference, model usecase.Model, asset usecase.Asset, publicURL string) http.Handler {
 	s := &Server{
 		node:      node,
 		reference: reference,
+		model:     model,
 		asset:     asset,
 		publicURL: strings.TrimRight(publicURL, "/"),
-		http:      &http.Client{Timeout: 60 * time.Second},
+		http:      &http.Client{Timeout: 5 * time.Minute},
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "gamedev-workspace", Version: "1.0.0"}, &mcp.ServerOptions{
 		Instructions: instructions,
@@ -82,7 +85,7 @@ func (s *Server) register(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_node",
 		Title:       "Get node",
-		Description: "Returns a folder or file with its description, characteristics, mechanics, reference prompt, asset category, references and breadcrumb path.",
+		Description: "Returns a folder or file with its description, characteristics, mechanics, reference prompt, asset category, references, 3D model and breadcrumb path.",
 		Annotations: readOnly,
 	}, s.getNode)
 
@@ -163,6 +166,20 @@ func (s *Server) register(server *mcp.Server) {
 		Description: "Permanently deletes a reference and its stored file.",
 		Annotations: destructive,
 	}, s.deleteReference)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "set_model_from_url",
+		Title:       "Set 3D model from URL",
+		Description: "Downloads a GLB model from a public http(s) URL and sets it as the file's 3D model, replacing the previous one.",
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(true), IdempotentHint: true, OpenWorldHint: ptr(true)},
+	}, s.setModelFromURL)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "delete_model",
+		Title:       "Delete 3D model",
+		Description: "Permanently deletes the file's 3D model and its stored file.",
+		Annotations: destructive,
+	}, s.deleteModel)
 }
 
 // ---- inputs ----
@@ -219,6 +236,16 @@ type urlReferenceInput struct {
 	Filename string `json:"filename,omitempty" jsonschema:"file name to store; derived from the URL when omitted"`
 }
 
+type urlModelInput struct {
+	NodeID   string `json:"node_id" jsonschema:"file node ID"`
+	URL      string `json:"url" jsonschema:"public http(s) URL of a .glb file"`
+	Filename string `json:"filename,omitempty" jsonschema:"file name to store; derived from the URL when omitted"`
+}
+
+type nodeIDInput struct {
+	NodeID string `json:"node_id" jsonschema:"file node ID"`
+}
+
 type base64ReferenceInput struct {
 	NodeID   string `json:"node_id" jsonschema:"file node ID"`
 	Filename string `json:"filename" jsonschema:"file name with extension, e.g. castle.png"`
@@ -228,6 +255,14 @@ type base64ReferenceInput struct {
 // ---- outputs ----
 
 type referenceView struct {
+	ID           string `json:"id"`
+	OriginalName string `json:"original_name"`
+	ContentType  string `json:"content_type"`
+	Size         int64  `json:"size"`
+	URL          string `json:"url"`
+}
+
+type modelView struct {
 	ID           string `json:"id"`
 	OriginalName string `json:"original_name"`
 	ContentType  string `json:"content_type"`
@@ -247,6 +282,7 @@ type nodeView struct {
 	ReferencePrompt string                  `json:"reference_prompt,omitempty"`
 	AssetCategory   *string                 `json:"asset_category,omitempty"`
 	References      []referenceView         `json:"references,omitempty"`
+	Model           *modelView              `json:"model,omitempty"`
 	Children        []childView             `json:"children,omitempty"`
 	WebURL          string                  `json:"web_url"`
 	UpdatedAt       string                  `json:"updated_at"`
@@ -291,6 +327,16 @@ func (s *Server) referenceView(ref usecase.ReferenceDTO) referenceView {
 	}
 }
 
+func (s *Server) modelView(model usecase.ModelDTO) modelView {
+	return modelView{
+		ID:           model.ID,
+		OriginalName: model.OriginalName,
+		ContentType:  model.ContentType,
+		Size:         model.Size,
+		URL:          s.publicURL + "/uploads/models/" + url.PathEscape(model.StoredName),
+	}
+}
+
 func (s *Server) nodeView(ctx context.Context, node usecase.NodeDTO) nodeView {
 	names := make([]string, 0, len(node.Path)+1)
 	for _, p := range node.Path {
@@ -314,6 +360,10 @@ func (s *Server) nodeView(ctx context.Context, node usecase.NodeDTO) nodeView {
 	}
 	for _, ref := range node.References {
 		v.References = append(v.References, s.referenceView(ref))
+	}
+	if node.Model != nil {
+		m := s.modelView(*node.Model)
+		v.Model = &m
 	}
 	if node.Kind == entity.KindFolder {
 		if tree, err := s.node.Tree(ctx); err == nil {
@@ -499,47 +549,38 @@ func (s *Server) deleteNode(ctx context.Context, _ *mcp.CallToolRequest, in idIn
 }
 
 func (s *Server) addReferenceFromURL(ctx context.Context, _ *mcp.CallToolRequest, in urlReferenceInput) (*mcp.CallToolResult, any, error) {
-	u, err := url.Parse(in.URL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, nil, fmt.Errorf("url must be an absolute http(s) URL")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	body, filename, err := s.download(ctx, in.URL, in.Filename, "reference")
 	if err != nil {
-		return nil, nil, publicErr(err)
+		return nil, nil, err
 	}
-	req.Header.Set("User-Agent", "gamedev-workspace/1.0 (+reference importer)")
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, nil, fmt.Errorf("download failed: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
-	}
+	defer body.Close()
 
-	filename := in.Filename
-	if filename == "" {
-		if _, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition")); err == nil {
-			filename = params["filename"]
-		}
-	}
-	if filename == "" {
-		filename = path.Base(u.Path)
-	}
-	if filename == "" || filename == "/" || filename == "." {
-		filename = "reference"
-	}
-	if path.Ext(filename) == "" {
-		if exts, _ := mime.ExtensionsByType(resp.Header.Get("Content-Type")); len(exts) > 0 {
-			filename += exts[0]
-		}
-	}
-
-	ref, err := s.reference.Upload(ctx, usecase.UploadReferenceInput{NodeID: in.NodeID, Filename: filename, Content: resp.Body})
+	ref, err := s.reference.Upload(ctx, usecase.UploadReferenceInput{NodeID: in.NodeID, Filename: filename, Content: body})
 	if err != nil {
 		return nil, nil, publicErr(err)
 	}
 	return nil, s.referenceView(ref), nil
+}
+
+func (s *Server) setModelFromURL(ctx context.Context, _ *mcp.CallToolRequest, in urlModelInput) (*mcp.CallToolResult, any, error) {
+	body, filename, err := s.download(ctx, in.URL, in.Filename, "model.glb")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer body.Close()
+
+	model, err := s.model.Upload(ctx, usecase.UploadModelInput{NodeID: in.NodeID, Filename: filename, Content: body})
+	if err != nil {
+		return nil, nil, publicErr(err)
+	}
+	return nil, s.modelView(model), nil
+}
+
+func (s *Server) deleteModel(ctx context.Context, _ *mcp.CallToolRequest, in nodeIDInput) (*mcp.CallToolResult, any, error) {
+	if err := s.model.Delete(ctx, in.NodeID); err != nil {
+		return nil, nil, publicErr(err)
+	}
+	return nil, map[string]any{"deleted_model_of": in.NodeID}, nil
 }
 
 func (s *Server) addReferenceFromBase64(ctx context.Context, _ *mcp.CallToolRequest, in base64ReferenceInput) (*mcp.CallToolResult, any, error) {
@@ -570,6 +611,46 @@ func (s *Server) deleteReference(ctx context.Context, _ *mcp.CallToolRequest, in
 }
 
 // ---- helpers ----
+
+// download starts fetching a public http(s) URL and picks a file name for it:
+// the given one, then Content-Disposition, then the URL path, then fallback.
+func (s *Server) download(ctx context.Context, rawURL, filename, fallback string) (io.ReadCloser, string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, "", fmt.Errorf("url must be an absolute http(s) URL")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, "", publicErr(err)
+	}
+	req.Header.Set("User-Agent", "gamedev-workspace/1.0 (+reference importer)")
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("download failed: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, "", fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+	}
+
+	if filename == "" {
+		if _, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition")); err == nil {
+			filename = params["filename"]
+		}
+	}
+	if filename == "" {
+		filename = path.Base(u.Path)
+	}
+	if filename == "" || filename == "/" || filename == "." {
+		filename = fallback
+	}
+	if path.Ext(filename) == "" {
+		if exts, _ := mime.ExtensionsByType(resp.Header.Get("Content-Type")); len(exts) > 0 {
+			filename += exts[0]
+		}
+	}
+	return resp.Body, filename, nil
+}
 
 func mergeCharacteristics(current, updates []entity.Characteristic) []entity.Characteristic {
 	result := append([]entity.Characteristic(nil), current...)

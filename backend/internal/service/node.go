@@ -21,6 +21,7 @@ const (
 type NodeService struct {
 	nodes      usecase.NodeRepository
 	references usecase.ReferenceRepository
+	models     usecase.ModelRepository
 	assets     usecase.AssetRepository
 	files      usecase.FileStorage
 	cache      usecase.TreeCache
@@ -29,11 +30,12 @@ type NodeService struct {
 func NewNodeService(
 	nodes usecase.NodeRepository,
 	references usecase.ReferenceRepository,
+	models usecase.ModelRepository,
 	assets usecase.AssetRepository,
 	files usecase.FileStorage,
 	cache usecase.TreeCache,
 ) *NodeService {
-	return &NodeService{nodes: nodes, references: references, assets: assets, files: files, cache: cache}
+	return &NodeService{nodes: nodes, references: references, models: models, assets: assets, files: files, cache: cache}
 }
 
 var _ usecase.Node = (*NodeService)(nil)
@@ -191,7 +193,7 @@ func (s *NodeService) Delete(ctx context.Context, id string) error {
 	}
 	for _, name := range storedNames {
 		if err := s.files.Remove(ctx, name); err != nil {
-			log.Printf("remove reference file %s: %v", name, err)
+			log.Printf("remove node file %s: %v", name, err)
 		}
 	}
 	s.invalidate(ctx)
@@ -269,6 +271,16 @@ func (s *NodeService) toDetailedDTO(ctx context.Context, node entity.Node) (usec
 	}
 	for _, ref := range references {
 		dto.References = append(dto.References, toReferenceDTO(ref))
+	}
+	if node.Kind == entity.KindFile {
+		model, err := s.models.GetByNodeID(ctx, node.ID)
+		if err != nil && !errors.Is(err, apperr.ErrNotFound) {
+			return usecase.NodeDTO{}, fmt.Errorf("get node model: %w", err)
+		}
+		if err == nil {
+			m := toModelDTO(model)
+			dto.Model = &m
+		}
 	}
 	return dto, nil
 }

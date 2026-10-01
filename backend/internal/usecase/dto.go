@@ -17,6 +17,16 @@ type ReferenceDTO struct {
 	CreatedAt    time.Time
 }
 
+type ModelDTO struct {
+	ID           string
+	NodeID       string
+	OriginalName string
+	StoredName   string
+	ContentType  string
+	Size         int64
+	CreatedAt    time.Time
+}
+
 type NodeDTO struct {
 	ID              string
 	ParentID        *string
@@ -28,6 +38,7 @@ type NodeDTO struct {
 	ReferencePrompt string
 	AssetCategory   *string
 	References      []ReferenceDTO
+	Model           *ModelDTO // nil when the file has no 3D model
 	Path            []entity.PathItem
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -91,6 +102,7 @@ type AssetDTO struct {
 	Name     string
 	Summary  string
 	Preview  *string
+	HasModel bool
 	Path     []entity.PathItem
 }
 
@@ -102,6 +114,19 @@ type UploadReferenceInput struct {
 
 // ReferenceFile is an opened stored reference ready to be streamed to a client.
 type ReferenceFile struct {
+	Content     io.ReadSeekCloser
+	ContentType string
+	ModTime     time.Time
+}
+
+type UploadModelInput struct {
+	NodeID   string
+	Filename string
+	Content  io.Reader
+}
+
+// ModelFile is an opened stored model ready to be streamed to a client.
+type ModelFile struct {
 	Content     io.ReadSeekCloser
 	ContentType string
 	ModTime     time.Time

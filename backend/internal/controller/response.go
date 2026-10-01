@@ -18,6 +18,16 @@ type referenceResponse struct {
 	CreatedAt    string `json:"created_at"`
 }
 
+type modelResponse struct {
+	ID           string `json:"id"`
+	NodeID       string `json:"node_id"`
+	OriginalName string `json:"original_name"`
+	URL          string `json:"url"`
+	ContentType  string `json:"content_type"`
+	Size         int64  `json:"size"`
+	CreatedAt    string `json:"created_at"`
+}
+
 type pathItemResponse struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -34,6 +44,7 @@ type nodeResponse struct {
 	ReferencePrompt string                  `json:"reference_prompt"`
 	AssetCategory   *string                 `json:"asset_category"`
 	References      []referenceResponse     `json:"references"`
+	Model           *modelResponse          `json:"model"`
 	Path            []pathItemResponse      `json:"path"`
 	CreatedAt       string                  `json:"created_at"`
 	UpdatedAt       string                  `json:"updated_at"`
@@ -64,6 +75,7 @@ type assetResponse struct {
 	Name     string             `json:"name"`
 	Summary  string             `json:"summary"`
 	Preview  *string            `json:"preview"`
+	HasModel bool               `json:"has_model"`
 	Path     []pathItemResponse `json:"path"`
 }
 
@@ -78,6 +90,11 @@ type searchHitResponse struct {
 // UploadURL is the public path a stored reference is served from.
 func UploadURL(storedName string) string {
 	return "/uploads/" + url.PathEscape(storedName)
+}
+
+// ModelURL is the public path a stored 3D model is served from.
+func ModelURL(storedName string) string {
+	return "/uploads/models/" + url.PathEscape(storedName)
 }
 
 func previewURL(storedName *string) *string {
@@ -109,7 +126,7 @@ func toAssetsResponse(assets []usecase.AssetDTO) []assetResponse {
 	for _, a := range assets {
 		result = append(result, assetResponse{
 			ID: a.ID, ParentID: a.ParentID, Category: a.Category, Name: a.Name,
-			Summary: a.Summary, Preview: previewURL(a.Preview), Path: toPathResponse(a.Path),
+			Summary: a.Summary, Preview: previewURL(a.Preview), HasModel: a.HasModel, Path: toPathResponse(a.Path),
 		})
 	}
 	return result
@@ -127,6 +144,18 @@ func toReferenceResponse(ref usecase.ReferenceDTO) referenceResponse {
 	}
 }
 
+func toModelResponse(model usecase.ModelDTO) modelResponse {
+	return modelResponse{
+		ID:           model.ID,
+		NodeID:       model.NodeID,
+		OriginalName: model.OriginalName,
+		URL:          ModelURL(model.StoredName),
+		ContentType:  model.ContentType,
+		Size:         model.Size,
+		CreatedAt:    model.CreatedAt.Format(time.RFC3339),
+	}
+}
+
 func toNodeResponse(node usecase.NodeDTO) nodeResponse {
 	refs := make([]referenceResponse, 0, len(node.References))
 	for _, ref := range node.References {
@@ -135,6 +164,11 @@ func toNodeResponse(node usecase.NodeDTO) nodeResponse {
 	path := make([]pathItemResponse, 0, len(node.Path))
 	for _, p := range node.Path {
 		path = append(path, pathItemResponse{ID: p.ID, Name: p.Name})
+	}
+	var model *modelResponse
+	if node.Model != nil {
+		m := toModelResponse(*node.Model)
+		model = &m
 	}
 	return nodeResponse{
 		ID:              node.ID,
@@ -147,6 +181,7 @@ func toNodeResponse(node usecase.NodeDTO) nodeResponse {
 		ReferencePrompt: node.ReferencePrompt,
 		AssetCategory:   node.AssetCategory,
 		References:      refs,
+		Model:           model,
 		Path:            path,
 		CreatedAt:       node.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:       node.UpdatedAt.Format(time.RFC3339),

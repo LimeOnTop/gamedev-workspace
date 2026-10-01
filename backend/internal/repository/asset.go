@@ -75,6 +75,7 @@ func (r *AssetRepository) GetAssets(ctx context.Context, category string) ([]ent
 		       (SELECT ref.stored_name FROM node_references ref
 		         WHERE ref.node_id = a.id AND ref.content_type LIKE 'image/%'
 		         ORDER BY ref.created_at, ref.id LIMIT 1),
+		       EXISTS (SELECT 1 FROM node_models m WHERE m.node_id = a.id),
 		       COALESCE((SELECT json_agg(json_build_object('id', up.id, 'name', up.name) ORDER BY up.depth DESC)
 		                   FROM up WHERE up.asset_id = a.id), '[]')
 		FROM assets a
@@ -90,7 +91,7 @@ func (r *AssetRepository) GetAssets(ctx context.Context, category string) ([]ent
 	for rows.Next() {
 		var a entity.Asset
 		var path []byte
-		if err := rows.Scan(&a.ID, &a.ParentID, &a.Category, &a.Name, &a.Summary, &a.Preview, &path); err != nil {
+		if err := rows.Scan(&a.ID, &a.ParentID, &a.Category, &a.Name, &a.Summary, &a.Preview, &a.HasModel, &path); err != nil {
 			return nil, fmt.Errorf("scan asset: %w", err)
 		}
 		if a.Path, err = decodePath(path); err != nil {

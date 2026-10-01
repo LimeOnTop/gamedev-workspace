@@ -112,6 +112,8 @@ claude mcp add --transport http --scope user gamedev-workspace http://localhost:
 | `add_reference_from_url`    | Скачать изображение, видео или PDF по http(s)-ссылке и прикрепить к файлу       |
 | `add_reference_from_base64` | Прикрепить файл из base64 или `data:` URL                                        |
 | `delete_reference`          | Удалить референс                                                                |
+| `set_model_from_url`        | Скачать GLB по http(s)-ссылке и сделать его 3D-моделью файла (заменяет прежнюю) |
+| `delete_model`              | Удалить 3D-модель файла                                                         |
 
 Каждый результат содержит `web_url`, ссылку на изменённую страницу. Базовый адрес задаёт `PUBLIC_URL`.
 
@@ -170,13 +172,16 @@ REST и MCP — два транспорта над одними и теми же
 | `GET`    | `/api/asset-categories`       | Категории 3D-ассетов с количеством объектов                         |
 | `GET`    | `/api/assets?category=`       | Каталог 3D-ассетов (без `category` выводятся все)                   |
 | `POST`   | `/api/nodes`                  | `{parent_id?, kind: "folder"\|"file", name, description?, mechanics?, characteristics?, reference_prompt?, asset_category?}` |
-| `GET`    | `/api/nodes/:id`              | Узел с референсами и путём                                          |
+| `GET`    | `/api/nodes/:id`              | Узел с референсами, 3D-моделью (`model` или `null`) и путём          |
 | `PATCH`  | `/api/nodes/:id`              | Частичное обновление `{name?, description?, mechanics?, characteristics?, reference_prompt?, asset_category?}`; `asset_category: ""` убирает файл из каталога |
 | `POST`   | `/api/nodes/:id/move`         | `{parent_id}`: `null` переносит в корень                            |
 | `DELETE` | `/api/nodes/:id`              | Удалить узел и поддерево                                            |
 | `POST`   | `/api/nodes/:id/references`   | `multipart/form-data`, поле `file`                                  |
 | `DELETE` | `/api/references/:id`         | Удалить референс                                                    |
 | `GET`    | `/uploads/:name`              | Файл референса                                                      |
+| `PUT`    | `/api/nodes/:id/model`        | 3D-модель файла: `multipart/form-data`, поле `file` (только GLB); заменяет прежнюю |
+| `DELETE` | `/api/nodes/:id/model`        | Удалить 3D-модель файла                                             |
+| `GET`    | `/uploads/models/:name`       | Файл 3D-модели                                                      |
 | `GET`    | `/health`                     | Healthcheck                                                         |
 
 ## Локальная разработка без Docker для кода
@@ -217,6 +222,7 @@ cd backend && make test lint
 | `WEB_BIND`          | `127.0.0.1`             | Интерфейс; `0.0.0.0` открывает доступ из локальной сети      |
 | `PUBLIC_URL`        | `http://localhost:3300` | Базовый адрес для ссылок в ответах MCP                       |
 | `MAX_UPLOAD_MB`     | `25`                    | Максимальный размер референса                                |
+| `MAX_MODEL_UPLOAD_MB` | `100`                 | Максимальный размер 3D-модели (GLB)                          |
 | `TREE_CACHE_TTL`    | `10m`                   | TTL кеша дерева в Redis                                      |
 | `DEV_MODE`          | `false`                 | Подробные тексты внутренних ошибок в ответах                 |
 | `POSTGRES_*`        | `workspace`             | Пользователь, пароль и имя БД                                |

@@ -89,6 +89,11 @@ export default function AssetsPage() {
                   </div>
                 )}
                 {!category && <span className="card-badge asset">{namesById.get(asset.category) ?? asset.category}</span>}
+                {asset.has_model && (
+                  <span className="card-badge model" title="Есть 3D-модель">
+                    <CubeIcon size={12} /> 3D
+                  </span>
+                )}
               </div>
               <div className="card-body">
                 <h3 className="card-title">{asset.name}</h3>

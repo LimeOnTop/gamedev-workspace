@@ -80,6 +80,19 @@ func (fakeRefs) GetByStoredName(context.Context, string) (entity.Reference, erro
 }
 func (fakeRefs) Delete(context.Context, string) (string, error) { return "", nil }
 
+type fakeModels struct{}
+
+func (fakeModels) Set(_ context.Context, m entity.Model) (entity.Model, string, error) {
+	return m, "", nil
+}
+func (fakeModels) GetByNodeID(context.Context, string) (entity.Model, error) {
+	return entity.Model{}, apperr.ErrNotFound
+}
+func (fakeModels) GetByStoredName(context.Context, string) (entity.Model, error) {
+	return entity.Model{}, apperr.ErrNotFound
+}
+func (fakeModels) Delete(context.Context, string) (string, error) { return "", apperr.ErrNotFound }
+
 type fakeAssets struct{}
 
 func (fakeAssets) GetCategories(context.Context) ([]entity.AssetCategory, error) { return nil, nil }
@@ -116,7 +129,7 @@ func newTestService() (*NodeService, *fakeNodes, *fakeFiles, *fakeCache) {
 	}}
 	files := &fakeFiles{}
 	cache := &fakeCache{}
-	return NewNodeService(nodes, fakeRefs{}, fakeAssets{}, files, cache), nodes, files, cache
+	return NewNodeService(nodes, fakeRefs{}, fakeModels{}, fakeAssets{}, files, cache), nodes, files, cache
 }
 
 func TestCreateValidatesParent(t *testing.T) {

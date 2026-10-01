@@ -53,7 +53,7 @@ func (s *AssetService) List(ctx context.Context, category string) ([]usecase.Ass
 	for _, a := range assets {
 		result = append(result, usecase.AssetDTO{
 			ID: a.ID, ParentID: a.ParentID, Category: a.Category, Name: a.Name,
-			Summary: a.Summary, Preview: a.Preview, Path: a.Path,
+			Summary: a.Summary, Preview: a.Preview, HasModel: a.HasModel, Path: a.Path,
 		})
 	}
 	return result, nil

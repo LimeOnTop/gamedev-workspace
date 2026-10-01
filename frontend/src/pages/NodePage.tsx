@@ -6,6 +6,7 @@ import NodeCards from '../components/NodeCards'
 import EditableText from '../components/EditableText'
 import CharacteristicsEditor from '../components/CharacteristicsEditor'
 import ReferenceGallery from '../components/ReferenceGallery'
+import ModelPanel from '../components/ModelPanel'
 import AssetCategorySelect from '../components/AssetCategorySelect'
 import PromptPanel from '../components/PromptPanel'
 import { useWorkspace } from '../workspace'
@@ -101,9 +102,14 @@ export default function NodePage() {
         </>
       ) : (
         <div className="file-layout">
-          <section className="panel">
-            <ReferenceGallery node={node} onChanged={reload} />
-          </section>
+          <div className="media-row">
+            <section className="panel">
+              <ReferenceGallery node={node} onChanged={reload} />
+            </section>
+            <section className="panel">
+              <ModelPanel node={node} onChanged={reload} />
+            </section>
+          </div>
           <div className="file-details">
             <section className="panel">
               <EditableText

@@ -18,5 +18,6 @@ type Asset struct {
 	Name     string
 	Summary  string
 	Preview  *string
+	HasModel bool
 	Path     []PathItem
 }

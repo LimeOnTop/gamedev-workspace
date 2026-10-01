@@ -189,7 +189,7 @@ func (r *NodeRepository) Delete(ctx context.Context, id string) ([]string, error
 		return nil, apperr.ErrNotFound
 	}
 	// Data-modifying CTEs see the pre-delete snapshot, so the subtree's
-	// references are collected in the same statement that removes them.
+	// reference and model files are collected in the same statement that removes them.
 	query := `
 		WITH RECURSIVE sub AS (
 			SELECT id FROM nodes WHERE id = $1
@@ -198,6 +198,8 @@ func (r *NodeRepository) Delete(ctx context.Context, id string) ([]string, error
 		),
 		files AS (
 			SELECT ref.stored_name FROM node_references ref JOIN sub ON ref.node_id = sub.id
+			UNION ALL
+			SELECT m.stored_name FROM node_models m JOIN sub ON m.node_id = sub.id
 		),
 		deleted AS (
 			DELETE FROM nodes WHERE id = $1 RETURNING id

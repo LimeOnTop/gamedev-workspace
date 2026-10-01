@@ -75,16 +75,19 @@ func main() {
 
 	nodeRepository := repository.NewNodeRepository(db)
 	referenceRepository := repository.NewReferenceRepository(db)
+	modelRepository := repository.NewModelRepository(db)
 	assetRepository := repository.NewAssetRepository(db)
 
-	nodeService := service.NewNodeService(nodeRepository, referenceRepository, assetRepository, files, treeCache)
+	nodeService := service.NewNodeService(nodeRepository, referenceRepository, modelRepository, assetRepository, files, treeCache)
 	referenceService := service.NewReferenceService(nodeRepository, referenceRepository, files, treeCache, cfg.MaxUploadSize)
+	modelService := service.NewModelService(nodeRepository, modelRepository, files, treeCache, cfg.MaxModelSize)
 	assetService := service.NewAssetService(assetRepository)
 
 	nodeController := controller.NewNodeController(nodeService)
 	referenceController := controller.NewReferenceController(referenceService, cfg.MaxUploadSize)
+	modelController := controller.NewModelController(modelService, cfg.MaxModelSize)
 	assetController := controller.NewAssetController(assetService)
-	mcpHandler := mcp.NewHandler(nodeService, referenceService, assetService, cfg.PublicURL)
+	mcpHandler := mcp.NewHandler(nodeService, referenceService, modelService, assetService, cfg.PublicURL)
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -106,6 +109,7 @@ func main() {
 	nodeController.Register(api)
 	assetController.Register(api)
 	referenceController.Register(api, logged)
+	modelController.Register(api, logged)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

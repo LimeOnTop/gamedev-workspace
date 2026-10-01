@@ -62,6 +62,7 @@ services:
       TREE_CACHE_TTL: ${TREE_CACHE_TTL:-10m}
       UPLOAD_DIR: /data/uploads
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      MAX_MODEL_UPLOAD_MB: ${MAX_MODEL_UPLOAD_MB:-100}
     volumes:
       - uploads:/data/uploads
     healthcheck:

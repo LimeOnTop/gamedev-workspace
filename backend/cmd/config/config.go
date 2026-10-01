@@ -29,6 +29,8 @@ type RedisConfig struct {
 type StorageConfig struct {
 	UploadDir     string
 	MaxUploadSize int64
+	// MaxModelSize limits 3D model uploads, which are much larger than references.
+	MaxModelSize int64
 }
 
 func Load() *Config {
@@ -48,6 +50,7 @@ func Load() *Config {
 		StorageConfig: StorageConfig{
 			UploadDir:     getEnv("UPLOAD_DIR", "./uploads"),
 			MaxUploadSize: getEnvInt64("MAX_UPLOAD_MB", 25) << 20,
+			MaxModelSize:  getEnvInt64("MAX_MODEL_UPLOAD_MB", 100) << 20,
 		},
 	}
 }

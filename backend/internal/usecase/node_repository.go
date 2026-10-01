@@ -16,7 +16,7 @@ type NodeRepository interface {
 	// IsDescendant reports whether candidate is id itself or lies in its subtree.
 	IsDescendant(ctx context.Context, id, candidate string) (bool, error)
 	// Delete removes the node with its subtree and returns the stored file
-	// names of every reference that belonged to the removed nodes.
+	// names of every reference and model that belonged to the removed nodes.
 	Delete(ctx context.Context, id string) ([]string, error)
 	Search(ctx context.Context, query string, limit int64) ([]entity.NodeBrief, error)
 }

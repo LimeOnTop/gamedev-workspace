@@ -751,6 +751,15 @@ h2 {
   color: var(--file);
 }
 
+.card-badge.model {
+  left: auto;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+}
+
 .card-body {
   padding: 12px 14px 14px;
   display: flex;
@@ -879,6 +888,122 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+/* References and the 3D model sit side by side once the page is wide enough. */
+.file-layout {
+  container-type: inline-size;
+}
+
+.media-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@container (min-width: 960px) {
+  .media-row {
+    grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
+  }
+}
+
+/* ---------- 3D model ---------- */
+
+.model-panel {
+  position: relative;
+}
+
+.model-stage {
+  position: relative;
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, var(--bg-hover), var(--bg) 75%);
+}
+
+.model-stage model-viewer {
+  display: block;
+  width: 100%;
+  height: 100%;
+  --poster-color: transparent;
+  --progress-bar-height: 0px;
+}
+
+.model-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.model-loading .upload-progress {
+  width: 50%;
+  margin: 0;
+}
+
+.model-loading.error {
+  color: var(--danger);
+}
+
+.model-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.model-toolbar > * {
+  pointer-events: auto;
+}
+
+.model-toolbar .segmented {
+  background: color-mix(in srgb, var(--bg-panel) 80%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.model-toolbar .segmented button {
+  padding: 0 8px;
+}
+
+.model-name {
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel) 80%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  right: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.model-dropzone {
+  min-height: 420px;
 }
 
 /* ---------- reference collage ---------- */
