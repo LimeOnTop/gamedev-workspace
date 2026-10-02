@@ -30,8 +30,10 @@ func (c *NodeController) Register(r gin.IRouter) {
 }
 
 type createNodeRequest struct {
-	ParentID        *string                 `json:"parent_id"`
-	Kind            string                  `json:"kind" binding:"required"`
+	ParentID *string `json:"parent_id"`
+	Kind     string  `json:"kind" binding:"required"`
+	// FileType: "object" (default) or "scenario"; files only.
+	FileType        string                  `json:"file_type"`
 	Name            string                  `json:"name" binding:"required"`
 	Description     string                  `json:"description"`
 	Mechanics       string                  `json:"mechanics"`
@@ -48,6 +50,8 @@ type updateNodeRequest struct {
 	ReferencePrompt *string                  `json:"reference_prompt"`
 	// AssetCategory: omit to keep, "" to remove the file from the asset catalog.
 	AssetCategory *string `json:"asset_category"`
+	// FileType: "object" or "scenario"; omit to keep.
+	FileType *string `json:"file_type"`
 }
 
 type moveNodeRequest struct {
@@ -91,6 +95,7 @@ func (c *NodeController) Create(ctx *gin.Context) {
 	node, err := c.node.Create(ctx.Request.Context(), usecase.CreateNodeInput{
 		ParentID:        req.ParentID,
 		Kind:            req.Kind,
+		FileType:        req.FileType,
 		Name:            req.Name,
 		Description:     req.Description,
 		Mechanics:       req.Mechanics,
@@ -118,6 +123,7 @@ func (c *NodeController) Update(ctx *gin.Context) {
 		Characteristics: req.Characteristics,
 		ReferencePrompt: req.ReferencePrompt,
 		AssetCategory:   req.AssetCategory,
+		FileType:        req.FileType,
 	})
 	if err != nil {
 		apperr.Respond(ctx, err)

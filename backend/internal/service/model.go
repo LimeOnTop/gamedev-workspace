@@ -47,6 +47,9 @@ func (s *ModelService) Upload(ctx context.Context, input usecase.UploadModelInpu
 	if node.Kind != entity.KindFile {
 		return usecase.ModelDTO{}, apperr.Validation("3D models can only be attached to files, not folders")
 	}
+	if node.FileType == entity.FileTypeScenario {
+		return usecase.ModelDTO{}, apperr.Validation("scenario files cannot have a 3D model; make the file an object first")
+	}
 
 	content := bufio.NewReaderSize(input.Content, 512)
 	head, _ := content.Peek(len(glbMagic))

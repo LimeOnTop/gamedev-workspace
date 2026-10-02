@@ -12,7 +12,8 @@ import (
 	"github.com/LimeOnTop/gamedev-workspace/backend/internal/usecase"
 )
 
-const treeKey = "workspace:tree:v1"
+// treeKey is versioned: bump it whenever TreeNodeDTO changes shape.
+const treeKey = "workspace:tree:v2"
 
 // Store caches the folder tree in Redis.
 type Store struct {

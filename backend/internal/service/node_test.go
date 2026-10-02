@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/LimeOnTop/gamedev-workspace/backend/internal/apperr"
@@ -125,7 +126,8 @@ func newTestService() (*NodeService, *fakeNodes, *fakeFiles, *fakeCache) {
 	nodes := &fakeNodes{nodes: map[string]entity.Node{
 		"map":    {ID: "map", Kind: entity.KindFolder, Name: "Map"},
 		"region": {ID: "region", ParentID: ptr("map"), Kind: entity.KindFolder, Name: "Region"},
-		"castle": {ID: "castle", ParentID: ptr("region"), Kind: entity.KindFile, Name: "Castle"},
+		"castle": {ID: "castle", ParentID: ptr("region"), Kind: entity.KindFile, FileType: entity.FileTypeObject, Name: "Castle"},
+		"rules":  {ID: "rules", ParentID: ptr("map"), Kind: entity.KindFile, FileType: entity.FileTypeScenario, Name: "Rules"},
 	}}
 	files := &fakeFiles{}
 	cache := &fakeCache{}
@@ -229,5 +231,88 @@ func TestAssetCategoryValidation(t *testing.T) {
 	}
 	if got, err = svc.Update(ctx, "castle", usecase.UpdateNodeInput{AssetCategory: ptr("")}); err != nil || got.AssetCategory != nil {
 		t.Fatalf("category not cleared: %v %v", got.AssetCategory, err)
+	}
+}
+
+func TestCreateFileType(t *testing.T) {
+	svc, _, _, _ := newTestService()
+	ctx := context.Background()
+
+	got, err := svc.Create(ctx, usecase.CreateNodeInput{ParentID: ptr("map"), Kind: entity.KindFile, Name: "Village"})
+	if err != nil || got.FileType != entity.FileTypeObject {
+		t.Fatalf("default file type: want object, got %q (%v)", got.FileType, err)
+	}
+	got, err = svc.Create(ctx, usecase.CreateNodeInput{ParentID: ptr("map"), Kind: entity.KindFile, FileType: " scenario ", Name: "Story"})
+	if err != nil || got.FileType != entity.FileTypeScenario {
+		t.Fatalf("scenario: got %q (%v)", got.FileType, err)
+	}
+	folder, err := svc.Create(ctx, usecase.CreateNodeInput{Kind: entity.KindFolder, Name: "Docs"})
+	if err != nil || folder.FileType != "" {
+		t.Fatalf("folder must have no file type: got %q (%v)", folder.FileType, err)
+	}
+
+	invalid := []usecase.CreateNodeInput{
+		{Kind: entity.KindFolder, FileType: entity.FileTypeScenario, Name: "Folder"},
+		{Kind: entity.KindFile, FileType: "document", Name: "Unknown"},
+		{Kind: entity.KindFile, FileType: entity.FileTypeScenario, Name: "Asset", AssetCategory: ptr("map")},
+	}
+	for _, in := range invalid {
+		if _, err := svc.Create(ctx, in); !errors.Is(err, apperr.ErrValidation) {
+			t.Fatalf("%s: want validation error, got %v", in.Name, err)
+		}
+	}
+}
+
+func TestScenarioConversion(t *testing.T) {
+	svc, nodes, _, _ := newTestService()
+	ctx := context.Background()
+	castle := nodes.nodes["castle"]
+	castle.AssetCategory = ptr("map")
+	castle.Characteristics = []entity.Characteristic{{Key: "Size", Value: "120 m"}}
+	nodes.nodes["castle"] = castle
+
+	// A catalog asset must leave the catalog in the same request.
+	if _, err := svc.Update(ctx, "castle", usecase.UpdateNodeInput{FileType: ptr(entity.FileTypeScenario)}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("convert asset: want validation error, got %v", err)
+	}
+	got, err := svc.Update(ctx, "castle", usecase.UpdateNodeInput{FileType: ptr(entity.FileTypeScenario), AssetCategory: ptr("")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.FileType != entity.FileTypeScenario || got.AssetCategory != nil || len(got.Characteristics) != 1 {
+		t.Fatalf("conversion must clear the category and keep hidden fields: %+v", got)
+	}
+
+	if _, err := svc.Update(ctx, "castle", usecase.UpdateNodeInput{AssetCategory: ptr("weapon")}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("category on scenario: want validation error, got %v", err)
+	}
+	if _, err := svc.Update(ctx, "map", usecase.UpdateNodeInput{FileType: ptr(entity.FileTypeScenario)}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("folder file type: want validation error, got %v", err)
+	}
+	if _, err := svc.Update(ctx, "castle", usecase.UpdateNodeInput{FileType: ptr("")}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("empty file type: want validation error, got %v", err)
+	}
+
+	got, err = svc.Update(ctx, "castle", usecase.UpdateNodeInput{FileType: ptr(entity.FileTypeObject), AssetCategory: ptr("map")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.FileType != entity.FileTypeObject || got.AssetCategory == nil || len(got.Characteristics) != 1 {
+		t.Fatalf("back to object: %+v", got)
+	}
+}
+
+func TestScenarioRejectsAttachments(t *testing.T) {
+	nodes, _, _, _ := newTestService()
+	refs := NewReferenceService(nodes.nodes, fakeRefs{}, &fakeFiles{}, &fakeCache{}, 1<<20)
+	if _, err := refs.Upload(context.Background(), usecase.UploadReferenceInput{
+		NodeID: "rules", Filename: "map.png", Content: strings.NewReader("\x89PNG\r\n\x1a\n"),
+	}); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("reference on scenario: want validation error, got %v", err)
+	}
+
+	models, _, _ := newTestModelService()
+	if _, err := upload(models, "rules", "glTF\x02\x00\x00\x00"); !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("model on scenario: want validation error, got %v", err)
 	}
 }

@@ -7,15 +7,24 @@ const (
 	KindFile   = "file"
 )
 
+// File types: an object card (references, 3D model, stats) or a scenario
+// document that only has a structured Markdown description. Folders have none.
+const (
+	FileTypeObject   = "object"
+	FileTypeScenario = "scenario"
+)
+
 type Characteristic struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
 
 type Node struct {
-	ID              string
-	ParentID        *string
-	Kind            string
+	ID       string
+	ParentID *string
+	Kind     string
+	// FileType is set for files only; "" for folders.
+	FileType        string
 	Name            string
 	Description     string
 	Mechanics       string
@@ -33,6 +42,7 @@ type NodeBrief struct {
 	ID            string
 	ParentID      *string
 	Kind          string
+	FileType      string
 	Name          string
 	Summary       string
 	Preview       *string

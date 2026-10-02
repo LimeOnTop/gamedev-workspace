@@ -23,6 +23,13 @@ export const FolderIcon = (p: IconProps) => (
 export const FileIcon = (p: IconProps) => (
   <svg {...base(p)}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
 )
+/** A scenario file: a design document with text. */
+export const ScrollIcon = (p: IconProps) => (
+  <svg {...base(p)}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 12h6M9 15.5h6M9 19h3" /></svg>
+)
+export const ScrollPlusIcon = (p: IconProps) => (
+  <svg {...base(p)}><path d="M13 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v5" /><path d="M14 3v5h5M9 12h5M9 15.5h3M18 16v5M15.5 18.5h5" /></svg>
+)
 export const ChevronIcon = (p: IconProps) => (
   <svg {...base(p)}><path d="m9 6 6 6-6 6" /></svg>
 )

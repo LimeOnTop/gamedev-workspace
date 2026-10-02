@@ -586,6 +586,11 @@ h2 {
   flex: none;
 }
 
+.ico-scenario {
+  color: var(--scenario);
+  flex: none;
+}
+
 .row-actions {
   display: flex;
   gap: 1px;
@@ -751,6 +756,10 @@ h2 {
   color: var(--file);
 }
 
+.card-badge.scenario {
+  color: var(--scenario);
+}
+
 .card-badge.model {
   left: auto;
   right: 10px;
@@ -906,6 +915,218 @@ input:focus {
   .media-row {
     grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
   }
+}
+
+/* ---------- scenario document ---------- */
+
+/* Scenario files are themed per palette via --scenario, a mix of the file and accent colours. */
+:root {
+  --scenario: color-mix(in srgb, var(--file) 45%, var(--accent));
+}
+
+.scenario-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.scenario-layout.with-toc {
+  grid-template-columns: minmax(0, 1fr) 240px;
+}
+
+.scenario-toc {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.scenario-toc h2 {
+  margin-bottom: 8px;
+}
+
+.scenario-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scenario-toc button {
+  width: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.scenario-toc button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+@media (max-width: 1100px) {
+  .scenario-layout.with-toc {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scenario-toc {
+    position: static;
+    order: -1;
+  }
+}
+
+.markdown-editor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.markdown {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 1.4em 0 0.5em;
+  line-height: 1.3;
+  scroll-margin-top: 16px;
+}
+
+.markdown h1 {
+  font-size: 22px;
+}
+
+.markdown h2 {
+  font-size: 18px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown h3 {
+  font-size: 15px;
+}
+
+.markdown h4 {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown table,
+.markdown pre,
+.markdown blockquote {
+  margin: 0 0 0.9em;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.4em;
+}
+
+.markdown li + li {
+  margin-top: 0.25em;
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0.25em 0 0;
+}
+
+.markdown li::marker {
+  color: var(--accent);
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown strong {
+  color: var(--text);
+}
+
+.markdown code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown pre {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.markdown blockquote {
+  padding: 2px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--text-muted);
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.4em 0;
+}
+
+.markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown th {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+
+.markdown tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
+}
+
+.markdown input[type='checkbox'] {
+  margin-right: 6px;
+  accent-color: var(--accent);
 }
 
 /* ---------- 3D model ---------- */
@@ -1543,6 +1764,12 @@ img.lightbox-media {
 
 .modal h3 {
   font-size: 16px;
+}
+
+.modal-message {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .modal-actions {

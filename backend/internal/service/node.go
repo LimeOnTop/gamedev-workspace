@@ -86,7 +86,7 @@ func (s *NodeService) Search(ctx context.Context, query string, limit int64) ([]
 	hits := make([]usecase.SearchHitDTO, 0, len(briefs))
 	for _, b := range briefs {
 		hits = append(hits, usecase.SearchHitDTO{
-			ID: b.ID, ParentID: b.ParentID, Kind: b.Kind, Name: b.Name, Summary: b.Summary,
+			ID: b.ID, ParentID: b.ParentID, Kind: b.Kind, FileType: b.FileType, Name: b.Name, Summary: b.Summary,
 		})
 	}
 	return hits, nil
@@ -103,14 +103,22 @@ func (s *NodeService) Create(ctx context.Context, input usecase.CreateNodeInput)
 	if err := s.ensureFolder(ctx, input.ParentID); err != nil {
 		return usecase.NodeDTO{}, err
 	}
+	fileType, err := cleanFileType(input.Kind, input.FileType)
+	if err != nil {
+		return usecase.NodeDTO{}, err
+	}
 	category, err := s.checkAssetCategory(ctx, input.Kind, input.AssetCategory)
 	if err != nil {
 		return usecase.NodeDTO{}, err
+	}
+	if fileType == entity.FileTypeScenario && category != nil {
+		return usecase.NodeDTO{}, apperr.Validation("scenario files cannot have an asset category")
 	}
 
 	created, err := s.nodes.Create(ctx, entity.Node{
 		ParentID:        input.ParentID,
 		Kind:            input.Kind,
+		FileType:        fileType,
 		Name:            name,
 		Description:     strings.TrimSpace(input.Description),
 		Mechanics:       strings.TrimSpace(input.Mechanics),
@@ -152,6 +160,26 @@ func (s *NodeService) Update(ctx context.Context, id string, input usecase.Updat
 		if node.AssetCategory, err = s.checkAssetCategory(ctx, node.Kind, input.AssetCategory); err != nil {
 			return usecase.NodeDTO{}, err
 		}
+	}
+	converting := false
+	if input.FileType != nil {
+		if strings.TrimSpace(*input.FileType) == "" {
+			return usecase.NodeDTO{}, apperr.Validation("file_type must be %q or %q", entity.FileTypeObject, entity.FileTypeScenario)
+		}
+		fileType, err := cleanFileType(node.Kind, *input.FileType)
+		if err != nil {
+			return usecase.NodeDTO{}, err
+		}
+		converting = fileType != node.FileType
+		node.FileType = fileType
+	}
+	if node.FileType == entity.FileTypeScenario && node.AssetCategory != nil {
+		if converting && input.AssetCategory == nil {
+			return usecase.NodeDTO{}, apperr.Validation(
+				"the file is in the 3D asset catalog (%q): clear asset_category (\"\") in the same request to make it a scenario",
+				*node.AssetCategory)
+		}
+		return usecase.NodeDTO{}, apperr.Validation("scenario files cannot have an asset category")
 	}
 
 	updated, err := s.nodes.Update(ctx, node)
@@ -217,6 +245,26 @@ func (s *NodeService) ensureFolder(ctx context.Context, id *string) error {
 	return nil
 }
 
+// cleanFileType validates the file type of a node: folders have none,
+// files default to an object card.
+func cleanFileType(kind, fileType string) (string, error) {
+	fileType = strings.TrimSpace(fileType)
+	if kind != entity.KindFile {
+		if fileType != "" {
+			return "", apperr.Validation("only files have a file type, folders cannot")
+		}
+		return "", nil
+	}
+	switch fileType {
+	case "":
+		return entity.FileTypeObject, nil
+	case entity.FileTypeObject, entity.FileTypeScenario:
+		return fileType, nil
+	default:
+		return "", apperr.Validation("file_type must be %q or %q", entity.FileTypeObject, entity.FileTypeScenario)
+	}
+}
+
 // checkAssetCategory normalizes a requested asset category: "" clears it,
 // otherwise it must exist and may only be set on files.
 func (s *NodeService) checkAssetCategory(ctx context.Context, kind string, category *string) (*string, error) {
@@ -255,6 +303,7 @@ func (s *NodeService) toDetailedDTO(ctx context.Context, node entity.Node) (usec
 		ID:              node.ID,
 		ParentID:        node.ParentID,
 		Kind:            node.Kind,
+		FileType:        node.FileType,
 		Name:            node.Name,
 		Description:     node.Description,
 		Mechanics:       node.Mechanics,
@@ -304,6 +353,7 @@ func buildTree(briefs []entity.NodeBrief) []usecase.TreeNodeDTO {
 				ID:            b.ID,
 				ParentID:      b.ParentID,
 				Kind:          b.Kind,
+				FileType:      b.FileType,
 				Name:          b.Name,
 				Summary:       b.Summary,
 				Preview:       b.Preview,

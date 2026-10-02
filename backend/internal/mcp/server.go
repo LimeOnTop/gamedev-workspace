@@ -25,17 +25,22 @@ import (
 
 const instructions = `Gamedev Workspace stores game design documentation as a tree of folders and files.
 - Folders group related entities (e.g. "Weapons", "Map", "Characters").
-- Files describe a single game object (e.g. "Castle", "Pistol") and hold: description,
-  characteristics (ordered key/value pairs such as damage or size), interaction mechanics,
-  references (images, videos, PDFs) and at most one 3D model (GLB).
+- Files have a file_type:
+  - "object" (default): a single game object (e.g. "Castle", "Pistol") with description,
+    characteristics (ordered key/value pairs such as damage or size), interaction mechanics,
+    references (images, videos, PDFs) and at most one 3D model (GLB).
+  - "scenario": a design document (rules, mechanics overviews, story/scenarios, UI, tech notes,
+    open questions). It has only a description: Markdown structured with ## sections, lists and
+    tables. Scenarios cannot have references, a 3D model or an asset category.
+  Anything that gets references or a 3D model stays an "object" file.
 Workflow: call get_tree first to learn the structure and node IDs, then read/create/update nodes.
 Write content in the language the existing workspace uses. Every result includes web_url
 so you can link the user to the page you changed.
 
 3D asset catalog: files describing physical objects that will get a 3D model (weapons, siege engines,
 locations/buildings, characters, items, props, gear) should have asset_category set
-(see list_asset_categories). Design documents (story, rules, mechanics overviews, UI) must NOT
-get a category. Folders never have one.
+(see list_asset_categories). Design documents are scenario files and never get a category.
+Folders never have one.
 
 reference_prompt: a text-to-image prompt used to generate reference art for the object. Write it in
 English, as one self-contained paragraph: the object itself (shape, materials, colours, wear, scale
@@ -78,14 +83,14 @@ func (s *Server) register(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_tree",
 		Title:       "Get workspace tree",
-		Description: "Returns the whole folder/file tree as an indented outline with node IDs; 3D assets are marked [3D: category].",
+		Description: "Returns the whole folder/file tree as an indented outline with node IDs; 📁 folder, 📄 object file, 📜 scenario file; 3D assets are marked [3D: category].",
 		Annotations: readOnly,
 	}, s.getTree)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_node",
 		Title:       "Get node",
-		Description: "Returns a folder or file with its description, characteristics, mechanics, reference prompt, asset category, references, 3D model and breadcrumb path.",
+		Description: "Returns a folder or file with its file_type, description, characteristics, mechanics, reference prompt, asset category, references, 3D model and breadcrumb path.",
 		Annotations: readOnly,
 	}, s.getNode)
 
@@ -120,7 +125,7 @@ func (s *Server) register(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_file",
 		Title:       "Create file",
-		Description: "Creates a file (a game object card) with optional description, characteristics and mechanics.",
+		Description: "Creates a file: a game object card (file_type \"object\", default) or a design document (file_type \"scenario\") with a Markdown description.",
 		Annotations: additive,
 	}, s.createFile)
 
@@ -128,7 +133,8 @@ func (s *Server) register(server *mcp.Server) {
 		Name:  "update_node",
 		Title: "Update node",
 		Description: "Updates a folder or file. Omitted fields are unchanged. By default `characteristics` " +
-			"replaces the whole list; set merge_characteristics=true to upsert by key instead.",
+			"replaces the whole list; set merge_characteristics=true to upsert by key instead. " +
+			"file_type converts a file between object and scenario; hidden object fields are kept.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(true), IdempotentHint: true},
 	}, s.updateNode)
 
@@ -149,14 +155,14 @@ func (s *Server) register(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "add_reference_from_url",
 		Title:       "Add reference from URL",
-		Description: "Downloads an image/video/PDF from a public http(s) URL and attaches it to a file as a reference.",
+		Description: "Downloads an image/video/PDF from a public http(s) URL and attaches it to an object file as a reference.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(false), OpenWorldHint: ptr(true)},
 	}, s.addReferenceFromURL)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "add_reference_from_base64",
 		Title:       "Add reference from base64",
-		Description: "Attaches base64-encoded file content (optionally a data: URL) to a file as a reference.",
+		Description: "Attaches base64-encoded file content (optionally a data: URL) to an object file as a reference.",
 		Annotations: additive,
 	}, s.addReferenceFromBase64)
 
@@ -170,7 +176,7 @@ func (s *Server) register(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "set_model_from_url",
 		Title:       "Set 3D model from URL",
-		Description: "Downloads a GLB model from a public http(s) URL and sets it as the file's 3D model, replacing the previous one.",
+		Description: "Downloads a GLB model from a public http(s) URL and sets it as an object file's 3D model, replacing the previous one.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: ptr(true), IdempotentHint: true, OpenWorldHint: ptr(true)},
 	}, s.setModelFromURL)
 
@@ -201,8 +207,9 @@ type createFolderInput struct {
 
 type createFileInput struct {
 	ParentID        string                  `json:"parent_id,omitempty" jsonschema:"parent folder ID; omit to create at the root"`
-	Name            string                  `json:"name" jsonschema:"object name"`
-	Description     string                  `json:"description,omitempty" jsonschema:"what the object is: look, role, lore"`
+	Name            string                  `json:"name" jsonschema:"object or document name"`
+	FileType        string                  `json:"file_type,omitempty" jsonschema:"object (default): game object card; scenario: design document with only a Markdown description"`
+	Description     string                  `json:"description,omitempty" jsonschema:"object: look, role, lore; scenario: Markdown with ## sections, lists and tables"`
 	Mechanics       string                  `json:"mechanics,omitempty" jsonschema:"how the player interacts with the object"`
 	Characteristics []entity.Characteristic `json:"characteristics,omitempty" jsonschema:"ordered key/value stats, e.g. Damage=18"`
 	ReferencePrompt string                  `json:"reference_prompt,omitempty" jsonschema:"English text-to-image prompt for generating reference art of the object"`
@@ -219,6 +226,7 @@ type updateNodeInput struct {
 	RemoveCharacteristicKeys []string                `json:"remove_characteristic_keys,omitempty" jsonschema:"characteristic keys to remove (case-insensitive)"`
 	ReferencePrompt          *string                 `json:"reference_prompt,omitempty" jsonschema:"new reference generation prompt (replaces the old one)"`
 	AssetCategory            *string                 `json:"asset_category,omitempty" jsonschema:"3D asset category ID; empty string removes the file from the asset catalog"`
+	FileType                 *string                 `json:"file_type,omitempty" jsonschema:"object or scenario; making a file with an asset category a scenario requires asset_category=\"\""`
 }
 
 type listAssetsInput struct {
@@ -274,6 +282,7 @@ type nodeView struct {
 	ID              string                  `json:"id"`
 	ParentID        *string                 `json:"parent_id"`
 	Kind            string                  `json:"kind"`
+	FileType        string                  `json:"file_type,omitempty"`
 	Name            string                  `json:"name"`
 	Path            string                  `json:"path"`
 	Description     string                  `json:"description"`
@@ -298,17 +307,19 @@ type assetView struct {
 }
 
 type childView struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
-	Name string `json:"name"`
+	ID       string `json:"id"`
+	Kind     string `json:"kind"`
+	FileType string `json:"file_type,omitempty"`
+	Name     string `json:"name"`
 }
 
 type searchHitView struct {
-	ID      string `json:"id"`
-	Kind    string `json:"kind"`
-	Name    string `json:"name"`
-	Summary string `json:"summary,omitempty"`
-	WebURL  string `json:"web_url"`
+	ID       string `json:"id"`
+	Kind     string `json:"kind"`
+	FileType string `json:"file_type,omitempty"`
+	Name     string `json:"name"`
+	Summary  string `json:"summary,omitempty"`
+	WebURL   string `json:"web_url"`
 }
 
 func (s *Server) webURL(id string) string { return s.publicURL + "/node/" + id }
@@ -348,6 +359,7 @@ func (s *Server) nodeView(ctx context.Context, node usecase.NodeDTO) nodeView {
 		ID:              node.ID,
 		ParentID:        node.ParentID,
 		Kind:            node.Kind,
+		FileType:        node.FileType,
 		Name:            node.Name,
 		Path:            "/" + strings.Join(names, "/"),
 		Description:     node.Description,
@@ -369,7 +381,7 @@ func (s *Server) nodeView(ctx context.Context, node usecase.NodeDTO) nodeView {
 		if tree, err := s.node.Tree(ctx); err == nil {
 			if found := findTreeNode(tree, node.ID); found != nil {
 				for _, c := range found.Children {
-					v.Children = append(v.Children, childView{ID: c.ID, Kind: c.Kind, Name: c.Name})
+					v.Children = append(v.Children, childView{ID: c.ID, Kind: c.Kind, FileType: c.FileType, Name: c.Name})
 				}
 			}
 		}
@@ -394,6 +406,8 @@ func (s *Server) getTree(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}
 			icon := "📄"
 			if n.Kind == entity.KindFolder {
 				icon = "📁"
+			} else if n.FileType == entity.FileTypeScenario {
+				icon = "📜"
 			}
 			asset := ""
 			if n.AssetCategory != nil {
@@ -460,7 +474,7 @@ func (s *Server) searchNodes(ctx context.Context, _ *mcp.CallToolRequest, in sea
 	}
 	views := make([]searchHitView, 0, len(hits))
 	for _, h := range hits {
-		views = append(views, searchHitView{ID: h.ID, Kind: h.Kind, Name: h.Name, Summary: h.Summary, WebURL: s.webURL(h.ID)})
+		views = append(views, searchHitView{ID: h.ID, Kind: h.Kind, FileType: h.FileType, Name: h.Name, Summary: h.Summary, WebURL: s.webURL(h.ID)})
 	}
 	return nil, map[string]any{"results": views}, nil
 }
@@ -489,6 +503,7 @@ func (s *Server) createFile(ctx context.Context, _ *mcp.CallToolRequest, in crea
 	node, err := s.node.Create(ctx, usecase.CreateNodeInput{
 		ParentID:        optional(in.ParentID),
 		Kind:            entity.KindFile,
+		FileType:        in.FileType,
 		Name:            in.Name,
 		Description:     in.Description,
 		Mechanics:       in.Mechanics,
@@ -509,6 +524,7 @@ func (s *Server) updateNode(ctx context.Context, _ *mcp.CallToolRequest, in upda
 		Mechanics:       in.Mechanics,
 		ReferencePrompt: in.ReferencePrompt,
 		AssetCategory:   in.AssetCategory,
+		FileType:        in.FileType,
 	}
 
 	if in.Characteristics != nil || len(in.RemoveCharacteristicKeys) > 0 {

@@ -4,7 +4,8 @@ import { ancestorsOf, type TreeNode } from '../api'
 import { useWorkspace } from '../workspace'
 import { AssetCategoryIcon, CubeIcon } from './AssetIcons'
 import {
-  ChevronIcon, EditIcon, FileIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, HomeIcon, TrashIcon, UploadIcon,
+  ChevronIcon, EditIcon, FileIcon, FilePlusIcon, FolderIcon, FolderPlusIcon, HomeIcon, ScrollIcon, ScrollPlusIcon,
+  TrashIcon, UploadIcon,
 } from './Icons'
 
 const STORAGE_KEY = 'workspace.expanded'
@@ -90,6 +91,9 @@ export default function Sidebar() {
           <button className="icon-btn" title="Новый файл" onClick={() => createNode(null, 'file')}>
             <FilePlusIcon />
           </button>
+          <button className="icon-btn" title="Новый сценарий" onClick={() => createNode(null, 'file', 'scenario')}>
+            <ScrollPlusIcon />
+          </button>
         </div>
       </div>
 
@@ -120,6 +124,7 @@ function TreeItem({ node, depth, expanded, toggle, activeId }: TreeItemProps) {
   const { createNode, renameNode, deleteNode, uploadFiles } = useWorkspace()
   const fileInput = useRef<HTMLInputElement>(null)
   const isFolder = node.kind === 'folder'
+  const isScenario = node.file_type === 'scenario'
   const isOpen = expanded.has(node.id)
 
   const openFolder = () => {
@@ -143,6 +148,8 @@ function TreeItem({ node, depth, expanded, toggle, activeId }: TreeItemProps) {
         <Link to={`/node/${node.id}`} className="tree-link" onClick={isFolder ? openFolder : undefined}>
           {isFolder ? (
             <FolderIcon className="ico-folder" />
+          ) : isScenario ? (
+            <ScrollIcon className="ico-scenario" aria-label="Сценарий" />
           ) : node.asset_category ? (
             <CubeIcon className="ico-asset" aria-label="3D-ассет" />
           ) : (
@@ -159,8 +166,15 @@ function TreeItem({ node, depth, expanded, toggle, activeId }: TreeItemProps) {
               <button className="icon-btn" title="Новый файл" onClick={() => { openFolder(); createNode(node.id, 'file') }}>
                 <FilePlusIcon />
               </button>
+              <button
+                className="icon-btn"
+                title="Новый сценарий"
+                onClick={() => { openFolder(); createNode(node.id, 'file', 'scenario') }}
+              >
+                <ScrollPlusIcon />
+              </button>
             </>
-          ) : (
+          ) : isScenario ? null : (
             <>
               <button className="icon-btn" title="Загрузить референс" onClick={() => fileInput.current?.click()}>
                 <UploadIcon />

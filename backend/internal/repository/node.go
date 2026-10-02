@@ -27,7 +27,7 @@ func NewNodeRepository(db *sql.DB) *NodeRepository {
 
 var _ usecase.NodeRepository = (*NodeRepository)(nil)
 
-const nodeColumns = `id, parent_id, kind, name, description, mechanics, characteristics, reference_prompt, asset_category, created_at, updated_at`
+const nodeColumns = `id, parent_id, kind, file_type, name, description, mechanics, characteristics, reference_prompt, asset_category, created_at, updated_at`
 
 func (r *NodeRepository) Create(ctx context.Context, node entity.Node) (entity.Node, error) {
 	node.ID = uuid.New().String()
@@ -40,12 +40,12 @@ func (r *NodeRepository) Create(ctx context.Context, node entity.Node) (entity.N
 	}
 
 	query := `
-		INSERT INTO nodes (id, parent_id, kind, name, description, mechanics, characteristics,
+		INSERT INTO nodes (id, parent_id, kind, file_type, name, description, mechanics, characteristics,
 		                   reference_prompt, asset_category, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 	_, err = r.db.ExecContext(ctx, query,
-		node.ID, node.ParentID, node.Kind, node.Name, node.Description,
+		node.ID, node.ParentID, node.Kind, nullIfEmpty(node.FileType), node.Name, node.Description,
 		node.Mechanics, chars, node.ReferencePrompt, node.AssetCategory,
 		node.CreatedAt, node.UpdatedAt,
 	)
@@ -73,9 +73,11 @@ func (r *NodeRepository) GetByID(ctx context.Context, id string) (entity.Node, e
 
 func (r *NodeRepository) GetAllBrief(ctx context.Context) ([]entity.NodeBrief, error) {
 	query := `
-		SELECT n.id, n.parent_id, n.kind, n.name, left(n.description, 180), n.asset_category,
+		SELECT n.id, n.parent_id, n.kind, COALESCE(n.file_type, ''), n.name, left(n.description, 180), n.asset_category,
+		       -- References of a scenario are hidden, so it gets no preview.
 		       (SELECT ref.stored_name FROM node_references ref
 		         WHERE ref.node_id = n.id AND ref.content_type LIKE 'image/%'
+		           AND n.file_type IS DISTINCT FROM 'scenario'
 		         ORDER BY ref.created_at, ref.id LIMIT 1)
 		FROM nodes n
 		ORDER BY CASE n.kind WHEN 'folder' THEN 0 ELSE 1 END, lower(n.name), n.created_at
@@ -89,7 +91,7 @@ func (r *NodeRepository) GetAllBrief(ctx context.Context) ([]entity.NodeBrief, e
 	var nodes []entity.NodeBrief
 	for rows.Next() {
 		var n entity.NodeBrief
-		if err := rows.Scan(&n.ID, &n.ParentID, &n.Kind, &n.Name, &n.Summary, &n.AssetCategory, &n.Preview); err != nil {
+		if err := rows.Scan(&n.ID, &n.ParentID, &n.Kind, &n.FileType, &n.Name, &n.Summary, &n.AssetCategory, &n.Preview); err != nil {
 			return nil, fmt.Errorf("scan node: %w", err)
 		}
 		nodes = append(nodes, n)
@@ -140,12 +142,12 @@ func (r *NodeRepository) Update(ctx context.Context, node entity.Node) (entity.N
 	query := `
 		UPDATE nodes
 		SET name = $1, description = $2, mechanics = $3, characteristics = $4,
-		    reference_prompt = $5, asset_category = $6, updated_at = $7
-		WHERE id = $8
+		    reference_prompt = $5, asset_category = $6, file_type = $7, updated_at = $8
+		WHERE id = $9
 	`
 	res, err := r.db.ExecContext(ctx, query,
 		node.Name, node.Description, node.Mechanics, chars,
-		node.ReferencePrompt, node.AssetCategory, node.UpdatedAt, node.ID,
+		node.ReferencePrompt, node.AssetCategory, nullIfEmpty(node.FileType), node.UpdatedAt, node.ID,
 	)
 	if err != nil {
 		return entity.Node{}, fmt.Errorf("update node: %w", err)
@@ -220,7 +222,7 @@ func (r *NodeRepository) Delete(ctx context.Context, id string) ([]string, error
 
 func (r *NodeRepository) Search(ctx context.Context, query string, limit int64) ([]entity.NodeBrief, error) {
 	searchQuery := `
-		SELECT id, parent_id, kind, name, left(description, 180)
+		SELECT id, parent_id, kind, COALESCE(file_type, ''), name, left(description, 180)
 		FROM nodes
 		WHERE name ILIKE $1 OR description ILIKE $1 OR mechanics ILIKE $1
 		   OR characteristics::text ILIKE $1 OR reference_prompt ILIKE $1
@@ -237,7 +239,7 @@ func (r *NodeRepository) Search(ctx context.Context, query string, limit int64) 
 	var nodes []entity.NodeBrief
 	for rows.Next() {
 		var n entity.NodeBrief
-		if err := rows.Scan(&n.ID, &n.ParentID, &n.Kind, &n.Name, &n.Summary); err != nil {
+		if err := rows.Scan(&n.ID, &n.ParentID, &n.Kind, &n.FileType, &n.Name, &n.Summary); err != nil {
 			return nil, fmt.Errorf("scan node: %w", err)
 		}
 		nodes = append(nodes, n)
@@ -251,13 +253,15 @@ func (r *NodeRepository) Search(ctx context.Context, query string, limit int64) 
 func scanNode(row *sql.Row) (entity.Node, error) {
 	var node entity.Node
 	var chars []byte
+	var fileType sql.NullString
 	if err := row.Scan(
-		&node.ID, &node.ParentID, &node.Kind, &node.Name, &node.Description,
+		&node.ID, &node.ParentID, &node.Kind, &fileType, &node.Name, &node.Description,
 		&node.Mechanics, &chars, &node.ReferencePrompt, &node.AssetCategory,
 		&node.CreatedAt, &node.UpdatedAt,
 	); err != nil {
 		return entity.Node{}, err
 	}
+	node.FileType = fileType.String
 	if err := json.Unmarshal(chars, &node.Characteristics); err != nil {
 		return entity.Node{}, fmt.Errorf("decode characteristics: %w", err)
 	}
@@ -273,6 +277,14 @@ func marshalCharacteristics(chars []entity.Characteristic) ([]byte, error) {
 		return nil, fmt.Errorf("encode characteristics: %w", err)
 	}
 	return b, nil
+}
+
+// nullIfEmpty stores "" as NULL, e.g. the file type of a folder.
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func isUUID(s string) bool {

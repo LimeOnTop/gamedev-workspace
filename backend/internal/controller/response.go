@@ -37,6 +37,7 @@ type nodeResponse struct {
 	ID              string                  `json:"id"`
 	ParentID        *string                 `json:"parent_id"`
 	Kind            string                  `json:"kind"`
+	FileType        *string                 `json:"file_type"` // null for folders
 	Name            string                  `json:"name"`
 	Description     string                  `json:"description"`
 	Mechanics       string                  `json:"mechanics"`
@@ -54,6 +55,7 @@ type treeNodeResponse struct {
 	ID            string             `json:"id"`
 	ParentID      *string            `json:"parent_id"`
 	Kind          string             `json:"kind"`
+	FileType      *string            `json:"file_type"`
 	Name          string             `json:"name"`
 	Summary       string             `json:"summary"`
 	Preview       *string            `json:"preview"`
@@ -83,6 +85,7 @@ type searchHitResponse struct {
 	ID       string  `json:"id"`
 	ParentID *string `json:"parent_id"`
 	Kind     string  `json:"kind"`
+	FileType *string `json:"file_type"`
 	Name     string  `json:"name"`
 	Summary  string  `json:"summary"`
 }
@@ -103,6 +106,14 @@ func previewURL(storedName *string) *string {
 	}
 	u := UploadURL(*storedName)
 	return &u
+}
+
+// fileType renders the file type of folders as null.
+func fileType(t string) *string {
+	if t == "" {
+		return nil
+	}
+	return &t
 }
 
 func toPathResponse(path []entity.PathItem) []pathItemResponse {
@@ -174,6 +185,7 @@ func toNodeResponse(node usecase.NodeDTO) nodeResponse {
 		ID:              node.ID,
 		ParentID:        node.ParentID,
 		Kind:            node.Kind,
+		FileType:        fileType(node.FileType),
 		Name:            node.Name,
 		Description:     node.Description,
 		Mechanics:       node.Mechanics,
@@ -195,6 +207,7 @@ func toTreeResponse(nodes []usecase.TreeNodeDTO) []treeNodeResponse {
 			ID:            n.ID,
 			ParentID:      n.ParentID,
 			Kind:          n.Kind,
+			FileType:      fileType(n.FileType),
 			Name:          n.Name,
 			Summary:       n.Summary,
 			Preview:       previewURL(n.Preview),
@@ -209,7 +222,7 @@ func toSearchResponse(hits []usecase.SearchHitDTO) []searchHitResponse {
 	result := make([]searchHitResponse, 0, len(hits))
 	for _, h := range hits {
 		result = append(result, searchHitResponse{
-			ID: h.ID, ParentID: h.ParentID, Kind: h.Kind, Name: h.Name, Summary: h.Summary,
+			ID: h.ID, ParentID: h.ParentID, Kind: h.Kind, FileType: fileType(h.FileType), Name: h.Name, Summary: h.Summary,
 		})
 	}
 	return result

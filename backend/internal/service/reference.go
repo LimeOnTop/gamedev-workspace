@@ -45,6 +45,9 @@ func (s *ReferenceService) Upload(ctx context.Context, input usecase.UploadRefer
 	if node.Kind != entity.KindFile {
 		return usecase.ReferenceDTO{}, apperr.Validation("references can only be attached to files, not folders")
 	}
+	if node.FileType == entity.FileTypeScenario {
+		return usecase.ReferenceDTO{}, apperr.Validation("scenario files cannot have references; make the file an object first")
+	}
 
 	// Sniff the real type instead of trusting the client-provided one.
 	content := bufio.NewReaderSize(input.Content, 512)

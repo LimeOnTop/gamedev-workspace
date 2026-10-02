@@ -31,6 +31,7 @@ type NodeDTO struct {
 	ID              string
 	ParentID        *string
 	Kind            string
+	FileType        string // "" for folders
 	Name            string
 	Description     string
 	Mechanics       string
@@ -50,6 +51,7 @@ type TreeNodeDTO struct {
 	ID            string
 	ParentID      *string
 	Kind          string
+	FileType      string
 	Name          string
 	Summary       string
 	Preview       *string
@@ -61,13 +63,16 @@ type SearchHitDTO struct {
 	ID       string
 	ParentID *string
 	Kind     string
+	FileType string
 	Name     string
 	Summary  string
 }
 
 type CreateNodeInput struct {
-	ParentID        *string
-	Kind            string
+	ParentID *string
+	Kind     string
+	// FileType applies to files only: "" means entity.FileTypeObject.
+	FileType        string
 	Name            string
 	Description     string
 	Mechanics       string
@@ -86,6 +91,9 @@ type UpdateNodeInput struct {
 	ReferencePrompt *string
 	// AssetCategory: nil leaves it unchanged, "" removes the file from the asset catalog.
 	AssetCategory *string
+	// FileType converts a file between object and scenario. Fields hidden for
+	// scenarios (characteristics, references, model, ...) are kept, so it is reversible.
+	FileType *string
 }
 
 type AssetCategoryDTO struct {

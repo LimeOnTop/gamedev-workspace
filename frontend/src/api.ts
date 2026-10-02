@@ -1,9 +1,13 @@
 export type Kind = 'folder' | 'file'
 
+/** Files are object cards or scenario documents (Markdown only); folders have none. */
+export type FileType = 'object' | 'scenario'
+
 export interface TreeNode {
   id: string
   parent_id: string | null
   kind: Kind
+  file_type: FileType | null
   name: string
   summary: string
   preview: string | null
@@ -41,6 +45,7 @@ export interface NodeDetail {
   id: string
   parent_id: string | null
   kind: Kind
+  file_type: FileType | null
   name: string
   description: string
   mechanics: string
@@ -62,6 +67,7 @@ export interface NodePatch {
   reference_prompt?: string
   /** "" removes the file from the 3D asset catalog. */
   asset_category?: string
+  file_type?: FileType
 }
 
 export interface AssetCategory {
@@ -123,8 +129,8 @@ const json = (method: string, body: unknown): RequestInit => ({
 export const api = {
   tree: () => request<TreeNode[]>('/api/tree'),
   node: (id: string) => request<NodeDetail>(`/api/nodes/${id}`),
-  create: (parentId: string | null, kind: Kind, name: string) =>
-    request<NodeDetail>('/api/nodes', json('POST', { parent_id: parentId, kind, name })),
+  create: (parentId: string | null, kind: Kind, name: string, fileType?: FileType) =>
+    request<NodeDetail>('/api/nodes', json('POST', { parent_id: parentId, kind, name, file_type: fileType })),
   update: (id: string, patch: NodePatch) => request<NodeDetail>(`/api/nodes/${id}`, json('PATCH', patch)),
   remove: (id: string) => request<void>(`/api/nodes/${id}`, { method: 'DELETE' }),
   upload: (nodeId: string, file: File) => {

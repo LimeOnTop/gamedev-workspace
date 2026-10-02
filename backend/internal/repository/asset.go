@@ -22,7 +22,7 @@ var _ usecase.AssetRepository = (*AssetRepository)(nil)
 func (r *AssetRepository) GetCategories(ctx context.Context) ([]entity.AssetCategory, error) {
 	query := `
 		SELECT c.id, c.name, c.description, c.sort_order,
-		       (SELECT count(*) FROM nodes n WHERE n.asset_category = c.id AND n.kind = 'file')
+		       (SELECT count(*) FROM nodes n WHERE n.asset_category = c.id AND n.kind = 'file' AND n.file_type = 'object')
 		FROM asset_categories c
 		ORDER BY c.sort_order, c.name
 	`
@@ -61,7 +61,7 @@ func (r *AssetRepository) GetAssets(ctx context.Context, category string) ([]ent
 		WITH RECURSIVE assets AS (
 			SELECT id, parent_id, asset_category, name, left(description, 180) AS summary
 			FROM nodes
-			WHERE kind = 'file' AND asset_category IS NOT NULL
+			WHERE kind = 'file' AND file_type = 'object' AND asset_category IS NOT NULL
 			  AND ($1 = '' OR asset_category = $1)
 		),
 		up AS (

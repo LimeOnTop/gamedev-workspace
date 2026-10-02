@@ -1,13 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type AssetCategory, type Kind, type TreeNode } from './api'
+import { api, type AssetCategory, type FileType, type Kind, type TreeNode } from './api'
 
 interface Dialog {
   title: string
   initial: string
   confirmOnly?: boolean
   danger?: boolean
+  message?: string
+  action?: string
   resolve: (value: string | null) => void
+}
+
+export interface ConfirmOptions {
+  /** Explanation shown under the title. */
+  message?: string
+  /** Confirm button label; "Удалить" by default. */
+  action?: string
+  /** Red confirm button; true by default. */
+  danger?: boolean
 }
 
 interface WorkspaceContextValue {
@@ -20,8 +31,8 @@ interface WorkspaceContextValue {
   reload: () => Promise<void>
   notify: (message: string) => void
   askName: (title: string, initial?: string) => Promise<string | null>
-  confirm: (title: string) => Promise<boolean>
-  createNode: (parentId: string | null, kind: Kind) => Promise<void>
+  confirm: (title: string, options?: ConfirmOptions) => Promise<boolean>
+  createNode: (parentId: string | null, kind: Kind, fileType?: FileType) => Promise<void>
   renameNode: (id: string, current: string) => Promise<void>
   deleteNode: (id: string, name: string, kind: Kind) => Promise<void>
   uploadFiles: (
@@ -87,19 +98,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   )
 
   const confirm = useCallback(
-    (title: string) =>
+    (title: string, { message, action, danger = true }: ConfirmOptions = {}) =>
       new Promise<boolean>((resolve) =>
-        setDialog({ title, initial: '', confirmOnly: true, danger: true, resolve: (v) => resolve(v !== null) }),
+        setDialog({
+          title, initial: '', confirmOnly: true, danger, message, action, resolve: (v) => resolve(v !== null),
+        }),
       ),
     [],
   )
 
   const createNode = useCallback(
-    async (parentId: string | null, kind: Kind) => {
-      const name = await askName(kind === 'folder' ? 'Новая папка' : 'Новый файл')
+    async (parentId: string | null, kind: Kind, fileType?: FileType) => {
+      const title = kind === 'folder' ? 'Новая папка' : fileType === 'scenario' ? 'Новый сценарий' : 'Новый файл'
+      const name = await askName(title)
       if (!name) return
       try {
-        const node = await api.create(parentId, kind, name)
+        const node = await api.create(parentId, kind, name, fileType)
         await reload()
         navigate(`/node/${node.id}`)
       } catch (e) {
@@ -209,6 +223,7 @@ function DialogView({ dialog, onClose }: { dialog: Dialog; onClose: () => void }
         onKeyDown={(e) => e.key === 'Escape' && finish(null)}
       >
         <h3>{dialog.title}</h3>
+        {dialog.message && <p className="modal-message">{dialog.message}</p>}
         {!dialog.confirmOnly && (
           <input
             autoFocus
@@ -224,7 +239,7 @@ function DialogView({ dialog, onClose }: { dialog: Dialog; onClose: () => void }
             Отмена
           </button>
           <button type="submit" className={`btn ${dialog.danger ? 'danger' : 'primary'}`} autoFocus={dialog.confirmOnly}>
-            {dialog.confirmOnly ? 'Удалить' : 'Сохранить'}
+            {dialog.confirmOnly ? (dialog.action ?? 'Удалить') : 'Сохранить'}
           </button>
         </div>
       </form>

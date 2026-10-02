@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, findNode, type NodeDetail } from '../api'
-import { EditIcon, FileIcon, FolderIcon, TrashIcon } from '../components/Icons'
+import { EditIcon, FileIcon, FolderIcon, ScrollIcon, TrashIcon } from '../components/Icons'
 import NodeCards from '../components/NodeCards'
 import EditableText from '../components/EditableText'
 import CharacteristicsEditor from '../components/CharacteristicsEditor'
@@ -9,11 +9,12 @@ import ReferenceGallery from '../components/ReferenceGallery'
 import ModelPanel from '../components/ModelPanel'
 import AssetCategorySelect from '../components/AssetCategorySelect'
 import PromptPanel from '../components/PromptPanel'
+import ScenarioDocument from '../components/ScenarioDocument'
 import { useWorkspace } from '../workspace'
 
 export default function NodePage() {
   const { id = '' } = useParams()
-  const { tree, version, reload, renameNode, deleteNode, notify } = useWorkspace()
+  const { tree, version, reload, renameNode, deleteNode, notify, confirm } = useWorkspace()
   const [node, setNode] = useState<NodeDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -53,7 +54,21 @@ export default function NodePage() {
   }
 
   const isFolder = node.kind === 'folder'
+  const isScenario = node.file_type === 'scenario'
   const treeNode = findNode(tree, node.id)
+
+  // Object fields stay stored while the file is a scenario, so the conversion is reversible.
+  const makeScenario = async () => {
+    const ok = await confirm(`Сделать «${node.name}» сценарием?`, {
+      message:
+        'У сценария есть только структурированное описание. Референсы, 3D-модель, характеристики, механики и промпт ' +
+        'будут скрыты, но не удалены — они вернутся, если снова сделать файл объектом.' +
+        (node.asset_category ? ' Файл будет убран из каталога 3D-ассетов.' : ''),
+      action: 'Сделать сценарием',
+      danger: false,
+    })
+    if (ok) await save({ file_type: 'scenario', asset_category: '' }).catch(() => {})
+  }
 
   return (
     <div className="page">
@@ -70,14 +85,30 @@ export default function NodePage() {
       <header className="page-header">
         <div className="title-block">
           <div className="title-row">
-            {isFolder ? <FolderIcon size={26} className="ico-folder" /> : <FileIcon size={26} className="ico-file" />}
+            {isFolder ? (
+              <FolderIcon size={26} className="ico-folder" />
+            ) : isScenario ? (
+              <ScrollIcon size={26} className="ico-scenario" />
+            ) : (
+              <FileIcon size={26} className="ico-file" />
+            )}
             <h1>{node.name}</h1>
           </div>
-          {!isFolder && (
+          {!isFolder && !isScenario && (
             <AssetCategorySelect value={node.asset_category} onChange={(asset_category) => save({ asset_category })} />
           )}
         </div>
         <div className="header-actions">
+          {!isFolder &&
+            (isScenario ? (
+              <button className="btn ghost" onClick={() => save({ file_type: 'object' }).catch(() => {})}>
+                <FileIcon /> Сделать объектом
+              </button>
+            ) : (
+              <button className="btn ghost" onClick={makeScenario}>
+                <ScrollIcon /> Сделать сценарием
+              </button>
+            ))}
           <button className="btn ghost" onClick={() => renameNode(node.id, node.name)}>
             <EditIcon /> Переименовать
           </button>
@@ -100,6 +131,8 @@ export default function NodePage() {
           <h2 className="section-title">Содержимое</h2>
           <NodeCards nodes={treeNode?.children ?? []} parentId={node.id} />
         </>
+      ) : isScenario ? (
+        <ScenarioDocument value={node.description} onSave={(description) => save({ description })} />
       ) : (
         <div className="file-layout">
           <div className="media-row">
